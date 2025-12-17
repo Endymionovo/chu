@@ -8,7 +8,7 @@
         body { margin: 0; overflow: hidden; background-color: #000205; font-family: 'Helvetica Neue', sans-serif; }
         #canvas-container { width: 100vw; height: 100vh; position: absolute; top: 0; left: 0; z-index: 1; }
         
-        /* UI Overlay */
+        /* UI Overlay - 更加极简高端 */
         #ui-layer {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 10;
             display: flex; flex-direction: column; justify-content: space-between; padding: 30px; box-sizing: border-box;
@@ -29,10 +29,10 @@
             align-self: flex-start;
         }
         
-        /* Removed Upload Button Styles */
+        /* 删除了上传按钮样式 */
 
-        .tips { color: rgba(255,255,255,0.7); font-size: 12px; margin-top: 0; line-height: 1.8; }
-        .key { color: #ffd700; font-weight: bold; border-bottom: 1px solid #555; }
+        .tips { color: rgba(255,255,255,0.5); font-size: 12px; margin-top: 0; line-height: 1.8; }
+        .key { color: #fff; font-weight: bold; border-bottom: 1px solid #555; }
 
         #hand-preview {
             position: absolute; bottom: 30px; right: 30px; width: 160px; height: 120px; 
@@ -61,10 +61,11 @@
     <div id="ui-layer">
         <div class="header">
             <h1>LUMINOUS CHRISTMAS</h1>
-            <div class="status" id="status-text">SYSTEM INITIALIZING...</div>
+            <div class="status" id="status-text">SYSTEM READY</div>
         </div>
 
         <div class="controls">
+            <!-- 删除了上传按钮 -->
             <div class="tips">
                 <div><span class="key">Open Hand</span> : Scatter & Float</div>
                 <div><span class="key">Fist</span> : Assemble Tree</div>
@@ -97,42 +98,48 @@
         import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
         import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
         
+        // --- Helper: Dynamic Script Loading ---
         const loadScript = (src) => new Promise((resolve, reject) => {
             const s = document.createElement('script');
             s.src = src; s.onload = resolve; s.onerror = reject; s.crossOrigin = "anonymous";
             document.head.appendChild(s);
         });
 
+        // --- Config ---
         const CONFIG = {
-            particleCount: 1200,
-            photoCount: 15, // Number of "123.png" cards
+            particleCount: 1200, 
+            photoCount: 15,
             treeHeight: 65,
             treeRadius: 28,
-            colors: [0x4CC9F0, 0x4361EE, 0xF72585, 0xFFD700, 0xFFFFFF],
-            bloom: { threshold: 0, strength: 2.5, radius: 0.8 }
+            colors: [0x4CC9F0, 0x4361EE, 0xF72585, 0xFFD700, 0xFFFFFF], 
+            bloom: { threshold: 0, strength: 2.5, radius: 0.8 } 
         };
 
+        // --- Globals ---
         let scene, camera, renderer, composer;
         let particles = [], mainGroup = new THREE.Group();
         const clock = new THREE.Clock();
         
+        // State
         const STATE = { ASSEMBLED: 'ASSEMBLED', SCATTERED: 'SCATTERED', FOCUSED: 'FOCUSED' };
         let currentState = STATE.ASSEMBLED;
         let targetState = STATE.ASSEMBLED;
         
+        // Interaction
         let mouse = new THREE.Vector2(), raycaster = new THREE.Raycaster();
         let focusedObject = null;
         let cameraTargetRot = { x: 0, y: 0 };
 
+        // --- Texture Generator ---
         function createGlowTexture() {
             const canvas = document.createElement('canvas');
             canvas.width = 64; canvas.height = 64;
             const ctx = canvas.getContext('2d');
             const gradient = ctx.createRadialGradient(32,32,0, 32,32,32);
-            gradient.addColorStop(0, 'rgba(255,255,255,1)');
-            gradient.addColorStop(0.3, 'rgba(255,255,255,0.4)');
-            gradient.addColorStop(0.5, 'rgba(255,255,255,0.1)');
-            gradient.addColorStop(1, 'rgba(0,0,0,0)');
+            gradient.addColorStop(0, 'rgba(255,255,255,1)'); 
+            gradient.addColorStop(0.3, 'rgba(255,255,255,0.4)'); 
+            gradient.addColorStop(0.5, 'rgba(255,255,255,0.1)'); 
+            gradient.addColorStop(1, 'rgba(0,0,0,0)'); 
             ctx.fillStyle = gradient;
             ctx.fillRect(0,0,64,64);
             const tex = new THREE.CanvasTexture(canvas);
@@ -142,18 +149,14 @@
 
         const glowTexture = createGlowTexture();
 
-        // --- Load the specific image ---
-        const imageLoader = new THREE.TextureLoader();
-        // Note: This loads asynchronously. The cubes might be black for a split second until loaded.
-        const specificImageTexture = imageLoader.load('123.png'); 
-        specificImageTexture.colorSpace = THREE.SRGBColorSpace;
-
+        // --- Initialization ---
         async function init() {
             const container = document.getElementById('canvas-container');
             
+            // 1. Scene
             scene = new THREE.Scene();
-            scene.background = new THREE.Color(0x000103);
-            scene.fog = new THREE.FogExp2(0x000103, 0.005);
+            scene.background = new THREE.Color(0x000103); 
+            scene.fog = new THREE.FogExp2(0x000103, 0.005); 
 
             camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
             camera.position.set(0, 10, 100);
@@ -164,6 +167,7 @@
             renderer.toneMapping = THREE.ReinhardToneMapping;
             container.appendChild(renderer.domElement);
 
+            // 2. Post Processing
             const renderScene = new RenderPass(scene, camera);
             const bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 1.5, 0.4, 0.85);
             bloomPass.threshold = CONFIG.bloom.threshold;
@@ -174,12 +178,15 @@
             composer.addPass(renderScene);
             composer.addPass(bloomPass);
 
+            // 3. Objects
             scene.add(mainGroup);
             createGlowingParticles();
-            createPhotos(); // Modified to use 123.png
+            createPhotos(); // Modified to load 123.png
 
+            // 4. Events
             window.addEventListener('resize', onWindowResize);
             
+            // 5. Start
             await setupMediaPipe();
             document.getElementById('loading').style.display = 'none';
             animate();
@@ -201,7 +208,7 @@
                 const sprite = new THREE.Sprite(material);
 
                 const percent = i / CONFIG.particleCount;
-                const angle = percent * Math.PI * 24 + Math.random();
+                const angle = percent * Math.PI * 24 + Math.random(); 
                 const height = percent * CONFIG.treeHeight - (CONFIG.treeHeight/2);
                 const r = (1 - percent) * CONFIG.treeRadius + (Math.random() * 2);
                 
@@ -230,22 +237,26 @@
         }
 
         function createPhotos() {
-            // Updated to use the loaded texture
-            const geo = new THREE.PlaneGeometry(8, 6); // Default aspect 4:3
+            // Photos setup - Modified to use 123.png directly
+            const geo = new THREE.PlaneGeometry(8, 6);
+            const loader = new THREE.TextureLoader();
             
-            // Create a shared material (or cloned if we need specific variations, but shared is fine here)
+            // Load 123.png
+            const texture = loader.load('123.png');
+            texture.colorSpace = THREE.SRGBColorSpace;
+            
+            // Use BasicMaterial so it stays bright
             const mat = new THREE.MeshBasicMaterial({ 
-                map: specificImageTexture, 
+                map: texture, 
                 side: THREE.DoubleSide
-            }); 
-
-            const frameGeo = new THREE.PlaneGeometry(8.5, 6.5);
-            const frameMat = new THREE.MeshBasicMaterial({ color: 0xFFD700 });
+            });
 
             for(let i=0; i<CONFIG.photoCount; i++) {
                 const mesh = new THREE.Mesh(geo, mat);
 
                 // Add a glowing frame behind it
+                const frameGeo = new THREE.PlaneGeometry(8.5, 6.5);
+                const frameMat = new THREE.MeshBasicMaterial({ color: 0xFFD700 });
                 const frame = new THREE.Mesh(frameGeo, frameMat);
                 frame.position.z = -0.05;
                 mesh.add(frame);
@@ -274,9 +285,12 @@
             }
         }
 
+        // --- Logic Updates ---
+
         function updateParticles(dt, time) {
             const lerpSpeed = 2.5 * dt;
 
+            // Global Rotation
             if (currentState === STATE.SCATTERED) {
                 mainGroup.rotation.y += 0.03 * dt;
                 mainGroup.rotation.x += (cameraTargetRot.x * 0.5 - mainGroup.rotation.x) * dt;
@@ -289,6 +303,7 @@
             particles.forEach(p => {
                 let target = (currentState === STATE.ASSEMBLED) ? p.treePos : p.scatterPos;
 
+                // Photo Focus Logic
                 if (currentState === STATE.FOCUSED && p === focusedObject) {
                     const dir = camera.getWorldDirection(new THREE.Vector3());
                     const focusPos = camera.position.clone().add(dir.multiplyScalar(30));
@@ -296,13 +311,16 @@
                     p.mesh.lookAt(camera.position);
                     p.mesh.scale.lerp(new THREE.Vector3(2.5, 2.5, 2.5), lerpSpeed);
                 } else {
+                    // Position Lerp
                     p.mesh.position.lerp(target, lerpSpeed);
                     
+                    // Twinkle Effect (Sine wave on scale)
                     if (!p.isPhoto) {
-                        const twinkle = Math.sin(time * 2 + p.phase) * 0.3 + 1;
+                        const twinkle = Math.sin(time * 2 + p.phase) * 0.3 + 1; 
                         const s = p.baseScale * twinkle;
                         p.mesh.scale.set(s,s,s);
                     } else {
+                        // Reset photo scale
                         p.mesh.scale.lerp(new THREE.Vector3(1, 1, 1), lerpSpeed);
                         if (currentState === STATE.ASSEMBLED) {
                             p.mesh.lookAt(0, p.treePos.y, 0);
@@ -314,6 +332,7 @@
             });
         }
 
+        // --- MediaPipe Logic ---
         async function setupMediaPipe() {
             await loadScript("https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js");
             await loadScript("https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js");
@@ -343,15 +362,18 @@
         }
 
         function handleGesture(lm) {
+            // 1. Open/Close Check
             const wrist = lm[0];
             const tips = [8,12,16,20];
             let extended = 0;
-            const size = Math.hypot(lm[9].x - wrist.x, lm[9].y - wrist.y);
+            const size = Math.hypot(lm[9].x - wrist.x, lm[9].y - wrist.y); 
             tips.forEach(t => { if (Math.hypot(lm[t].x - wrist.x, lm[t].y - wrist.y) > size * 1.3) extended++; });
 
+            // 2. Pinch Check
             const pinchDist = Math.hypot(lm[4].x - lm[8].x, lm[4].y - lm[8].y);
             const isPinching = pinchDist < 0.04;
 
+            // 3. Cursor
             const cx = (1 - lm[8].x) * window.innerWidth;
             const cy = lm[8].y * window.innerHeight;
             const cursor = document.getElementById('cursor');
@@ -361,6 +383,7 @@
             if (isPinching) cursor.classList.add('pinching');
             else cursor.classList.remove('pinching');
 
+            // 4. State Machine
             const status = document.getElementById('status-text');
 
             if (isPinching) {
@@ -389,6 +412,7 @@
             mouse.y = -(y / window.innerHeight) * 2 + 1;
             raycaster.setFromCamera(mouse, camera);
             
+            // Only intersect photos, not glow particles
             const targets = particles.filter(p => p.isPhoto).map(p => p.mesh);
             const hits = raycaster.intersectObjects(targets);
             
