@@ -8,7 +8,7 @@
         body { margin: 0; overflow: hidden; background-color: #000205; font-family: 'Helvetica Neue', sans-serif; }
         #canvas-container { width: 100vw; height: 100vh; position: absolute; top: 0; left: 0; z-index: 1; }
         
-        /* UI Overlay - 更加极简高端 */
+        /* UI Overlay */
         #ui-layer {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 10;
             display: flex; flex-direction: column; justify-content: space-between; padding: 30px; box-sizing: border-box;
@@ -29,8 +29,6 @@
             align-self: flex-start;
         }
         
-        /* 删除了上传按钮样式 */
-
         .tips { color: rgba(255,255,255,0.5); font-size: 12px; margin-top: 0; line-height: 1.8; }
         .key { color: #fff; font-weight: bold; border-bottom: 1px solid #555; }
 
@@ -65,9 +63,8 @@
         </div>
 
         <div class="controls">
-            <!-- 删除了上传按钮 -->
             <div class="tips">
-                <div><span class="key">Open Hand</span> : Scatter & Float</div>
+                <div><span class="key">Open Hand</span> : Show Greeting</div>
                 <div><span class="key">Fist</span> : Assemble Tree</div>
                 <div><span class="key">Pinch</span> : Grab Photo</div>
             </div>
@@ -98,7 +95,6 @@
         import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
         import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
         
-        // --- Helper: Dynamic Script Loading ---
         const loadScript = (src) => new Promise((resolve, reject) => {
             const s = document.createElement('script');
             s.src = src; s.onload = resolve; s.onerror = reject; s.crossOrigin = "anonymous";
@@ -118,14 +114,14 @@
         // --- Globals ---
         let scene, camera, renderer, composer;
         let particles = [], mainGroup = new THREE.Group();
+        let greetingSprite; // 祝福语文字对象
         const clock = new THREE.Clock();
         
         // State
-        const STATE = { ASSEMBLED: 'ASSEMBLED', SCATTERED: 'SCATTERED', FOCUSED: 'FOCUSED' };
+        const STATE = { ASSEMBLED: 'ASSEMBLED', GREETING: 'GREETING', FOCUSED: 'FOCUSED' };
         let currentState = STATE.ASSEMBLED;
         let targetState = STATE.ASSEMBLED;
         
-        // Interaction
         let mouse = new THREE.Vector2(), raycaster = new THREE.Raycaster();
         let focusedObject = null;
         let cameraTargetRot = { x: 0, y: 0 };
@@ -147,13 +143,40 @@
             return tex;
         }
 
+        // --- Text Texture Generator (New) ---
+        function createTextTexture() {
+            const canvas = document.createElement('canvas');
+            canvas.width = 1024; 
+            canvas.height = 256;
+            const ctx = canvas.getContext('2d');
+            
+            // 背景透明，绘制发光文字
+            ctx.font = 'bold 120px "Microsoft YaHei", sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            
+            // 发光效果
+            ctx.shadowColor = "rgba(255, 215, 0, 1)";
+            ctx.shadowBlur = 30;
+            ctx.fillStyle = "#FFFFFF";
+            ctx.fillText("初初圣诞快乐", 512, 128);
+            
+            // 再画一层金色的描边增强质感
+            ctx.strokeStyle = "#FFD700";
+            ctx.lineWidth = 4;
+            ctx.strokeText("初初圣诞快乐", 512, 128);
+
+            const tex = new THREE.CanvasTexture(canvas);
+            tex.colorSpace = THREE.SRGBColorSpace;
+            return tex;
+        }
+
         const glowTexture = createGlowTexture();
 
         // --- Initialization ---
         async function init() {
             const container = document.getElementById('canvas-container');
             
-            // 1. Scene
             scene = new THREE.Scene();
             scene.background = new THREE.Color(0x000103); 
             scene.fog = new THREE.FogExp2(0x000103, 0.005); 
@@ -167,7 +190,6 @@
             renderer.toneMapping = THREE.ReinhardToneMapping;
             container.appendChild(renderer.domElement);
 
-            // 2. Post Processing
             const renderScene = new RenderPass(scene, camera);
             const bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 1.5, 0.4, 0.85);
             bloomPass.threshold = CONFIG.bloom.threshold;
@@ -178,18 +200,32 @@
             composer.addPass(renderScene);
             composer.addPass(bloomPass);
 
-            // 3. Objects
             scene.add(mainGroup);
             createGlowingParticles();
-            createPhotos(); // Modified to load 123.png
+            createPhotos();
+            createGreetingObject(); // 创建文字对象
 
-            // 4. Events
             window.addEventListener('resize', onWindowResize);
             
-            // 5. Start
             await setupMediaPipe();
             document.getElementById('loading').style.display = 'none';
             animate();
+        }
+
+        function createGreetingObject() {
+            const texture = createTextTexture();
+            const material = new THREE.SpriteMaterial({ 
+                map: texture, 
+                transparent: true, 
+                opacity: 0, // 初始隐藏
+                depthWrite: false,
+                blending: THREE.AdditiveBlending // 发光叠加混合
+            });
+            greetingSprite = new THREE.Sprite(material);
+            // 初始大小和位置
+            greetingSprite.scale.set(60, 15, 1); 
+            greetingSprite.position.set(0, 0, 10); // 稍微靠前
+            scene.add(greetingSprite); // 直接加到场景，不加到 mainGroup 以免旋转太快
         }
 
         function createGlowingParticles() {
@@ -214,9 +250,9 @@
                 
                 const treePos = new THREE.Vector3(Math.cos(angle)*r, height, Math.sin(angle)*r);
                 const scatterPos = new THREE.Vector3(
-                    (Math.random()-0.5) * 150,
-                    (Math.random()-0.5) * 150,
-                    (Math.random()-0.5) * 150
+                    (Math.random()-0.5) * 180, // 散开得更广一些，给文字留空间
+                    (Math.random()-0.5) * 120,
+                    (Math.random()-0.5) * 120
                 );
 
                 const baseS = Math.random() * 1.5 + 0.5;
@@ -237,15 +273,12 @@
         }
 
         function createPhotos() {
-            // Photos setup - Modified to use 123.png directly
             const geo = new THREE.PlaneGeometry(8, 6);
             const loader = new THREE.TextureLoader();
             
-            // Load 123.png
             const texture = loader.load('123.png');
             texture.colorSpace = THREE.SRGBColorSpace;
             
-            // Use BasicMaterial so it stays bright
             const mat = new THREE.MeshBasicMaterial({ 
                 map: texture, 
                 side: THREE.DoubleSide
@@ -254,21 +287,19 @@
             for(let i=0; i<CONFIG.photoCount; i++) {
                 const mesh = new THREE.Mesh(geo, mat);
 
-                // Add a glowing frame behind it
                 const frameGeo = new THREE.PlaneGeometry(8.5, 6.5);
                 const frameMat = new THREE.MeshBasicMaterial({ color: 0xFFD700 });
                 const frame = new THREE.Mesh(frameGeo, frameMat);
                 frame.position.z = -0.05;
                 mesh.add(frame);
 
-                // Position logic
                 const percent = Math.random();
                 const angle = percent * Math.PI * 14;
                 const h = (Math.random() - 0.5) * (CONFIG.treeHeight * 0.8);
                 const r = ((CONFIG.treeHeight/2 - h) / CONFIG.treeHeight) * CONFIG.treeRadius + 4;
                 
                 const treePos = new THREE.Vector3(Math.cos(angle)*r, h, Math.sin(angle)*r);
-                const scatterPos = new THREE.Vector3((Math.random()-0.5)*120, (Math.random()-0.5)*120, (Math.random()-0.5)*120);
+                const scatterPos = new THREE.Vector3((Math.random()-0.5)*150, (Math.random()-0.5)*150, (Math.random()-0.5)*100);
 
                 mesh.position.copy(treePos);
                 mesh.lookAt(0, h, 0);
@@ -290,20 +321,42 @@
         function updateParticles(dt, time) {
             const lerpSpeed = 2.5 * dt;
 
-            // Global Rotation
-            if (currentState === STATE.SCATTERED) {
-                mainGroup.rotation.y += 0.03 * dt;
-                mainGroup.rotation.x += (cameraTargetRot.x * 0.5 - mainGroup.rotation.x) * dt;
-                mainGroup.rotation.y += (cameraTargetRot.y * 0.5 - mainGroup.rotation.y) * dt;
+            // 1. 处理文字显示逻辑
+            if (currentState === STATE.GREETING) {
+                // 淡入并放大
+                greetingSprite.material.opacity = THREE.MathUtils.lerp(greetingSprite.material.opacity, 1, dt * 2);
+                const s = greetingSprite.scale.x;
+                const targetS = 65; // 目标宽度
+                const newS = THREE.MathUtils.lerp(s, targetS, dt * 2);
+                greetingSprite.scale.set(newS, newS * 0.25, 1);
+                
+                // 让文字轻微浮动
+                greetingSprite.position.y = Math.sin(time) * 2;
+                
+                // 散开背景慢慢旋转
+                mainGroup.rotation.y += 0.05 * dt;
             } else {
+                // 淡出并缩小
+                greetingSprite.material.opacity = THREE.MathUtils.lerp(greetingSprite.material.opacity, 0, dt * 5);
+                const s = greetingSprite.scale.x;
+                const newS = THREE.MathUtils.lerp(s, 30, dt * 5);
+                greetingSprite.scale.set(newS, newS * 0.25, 1);
+                
+                // 圣诞树旋转
                 mainGroup.rotation.y += 0.2 * dt;
                 mainGroup.rotation.x += (0 - mainGroup.rotation.x) * dt;
             }
 
+            // 2. 处理粒子逻辑
             particles.forEach(p => {
-                let target = (currentState === STATE.ASSEMBLED) ? p.treePos : p.scatterPos;
+                let target;
+                if (currentState === STATE.ASSEMBLED) {
+                    target = p.treePos;
+                } else {
+                    // 在 GREETING 或 SCATTERED 状态下都使用散开位置
+                    target = p.scatterPos;
+                }
 
-                // Photo Focus Logic
                 if (currentState === STATE.FOCUSED && p === focusedObject) {
                     const dir = camera.getWorldDirection(new THREE.Vector3());
                     const focusPos = camera.position.clone().add(dir.multiplyScalar(30));
@@ -311,20 +364,18 @@
                     p.mesh.lookAt(camera.position);
                     p.mesh.scale.lerp(new THREE.Vector3(2.5, 2.5, 2.5), lerpSpeed);
                 } else {
-                    // Position Lerp
                     p.mesh.position.lerp(target, lerpSpeed);
                     
-                    // Twinkle Effect (Sine wave on scale)
                     if (!p.isPhoto) {
                         const twinkle = Math.sin(time * 2 + p.phase) * 0.3 + 1; 
                         const s = p.baseScale * twinkle;
                         p.mesh.scale.set(s,s,s);
                     } else {
-                        // Reset photo scale
                         p.mesh.scale.lerp(new THREE.Vector3(1, 1, 1), lerpSpeed);
                         if (currentState === STATE.ASSEMBLED) {
                             p.mesh.lookAt(0, p.treePos.y, 0);
                         } else {
+                            // 散开时稍微随机朝向或者看向相机
                             p.mesh.lookAt(camera.position);
                         }
                     }
@@ -332,7 +383,6 @@
             });
         }
 
-        // --- MediaPipe Logic ---
         async function setupMediaPipe() {
             await loadScript("https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js");
             await loadScript("https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js");
@@ -362,18 +412,15 @@
         }
 
         function handleGesture(lm) {
-            // 1. Open/Close Check
             const wrist = lm[0];
             const tips = [8,12,16,20];
             let extended = 0;
             const size = Math.hypot(lm[9].x - wrist.x, lm[9].y - wrist.y); 
             tips.forEach(t => { if (Math.hypot(lm[t].x - wrist.x, lm[t].y - wrist.y) > size * 1.3) extended++; });
 
-            // 2. Pinch Check
             const pinchDist = Math.hypot(lm[4].x - lm[8].x, lm[4].y - lm[8].y);
             const isPinching = pinchDist < 0.04;
 
-            // 3. Cursor
             const cx = (1 - lm[8].x) * window.innerWidth;
             const cy = lm[8].y * window.innerHeight;
             const cursor = document.getElementById('cursor');
@@ -383,14 +430,13 @@
             if (isPinching) cursor.classList.add('pinching');
             else cursor.classList.remove('pinching');
 
-            // 4. State Machine
             const status = document.getElementById('status-text');
 
             if (isPinching) {
                 if (currentState !== STATE.ASSEMBLED) checkInteract(cx, cy);
             } else {
                 if (currentState === STATE.FOCUSED) {
-                    targetState = STATE.SCATTERED;
+                    targetState = STATE.GREETING; // 松手后回到祝福状态
                     focusedObject = null;
                 }
                 
@@ -398,10 +444,9 @@
                     targetState = STATE.ASSEMBLED;
                     status.innerText = "STATUS: TREE MODE";
                 } else if (extended >= 4) {
-                    targetState = STATE.SCATTERED;
-                    status.innerText = "STATUS: UNIVERSE MODE";
-                    cameraTargetRot.y = (lm[9].x - 0.5) * 3;
-                    cameraTargetRot.x = (lm[9].y - 0.5) * 3;
+                    // --- 修改点：张手触发 GREETING ---
+                    targetState = STATE.GREETING;
+                    status.innerText = "STATUS: MERRY CHRISTMAS";
                 }
             }
             currentState = targetState;
@@ -412,7 +457,6 @@
             mouse.y = -(y / window.innerHeight) * 2 + 1;
             raycaster.setFromCamera(mouse, camera);
             
-            // Only intersect photos, not glow particles
             const targets = particles.filter(p => p.isPhoto).map(p => p.mesh);
             const hits = raycaster.intersectObjects(targets);
             
