@@ -66,7 +66,7 @@
             <div class="tips">
                 <div><span class="key">Open Hand</span> : Show Greeting</div>
                 <div><span class="key">Fist</span> : Assemble Tree</div>
-                <div><span class="key">Pinch</span> : Grab Photo</div>
+                <div><span class="key">Pinch</span> : Grab Heart</div>
             </div>
         </div>
     </div>
@@ -104,7 +104,7 @@
         // --- Config ---
         const CONFIG = {
             particleCount: 1200, 
-            photoCount: 15,
+            photoCount: 20, // 稍微增加心形的数量
             treeHeight: 65,
             treeRadius: 28,
             colors: [0x4CC9F0, 0x4361EE, 0xF72585, 0xFFD700, 0xFFFFFF], 
@@ -114,10 +114,9 @@
         // --- Globals ---
         let scene, camera, renderer, composer;
         let particles = [], mainGroup = new THREE.Group();
-        let greetingSprite; // 祝福语文字对象
+        let greetingSprite; 
         const clock = new THREE.Clock();
         
-        // State
         const STATE = { ASSEMBLED: 'ASSEMBLED', GREETING: 'GREETING', FOCUSED: 'FOCUSED' };
         let currentState = STATE.ASSEMBLED;
         let targetState = STATE.ASSEMBLED;
@@ -126,7 +125,7 @@
         let focusedObject = null;
         let cameraTargetRot = { x: 0, y: 0 };
 
-        // --- Texture Generator ---
+        // --- Texture Helper: Glow Dot ---
         function createGlowTexture() {
             const canvas = document.createElement('canvas');
             canvas.width = 64; canvas.height = 64;
@@ -143,27 +142,57 @@
             return tex;
         }
 
-        // --- Text Texture Generator (New) ---
+        // --- Texture Helper: Pink Heart (新: 绘制爱心) ---
+        function createHeartTexture() {
+            const canvas = document.createElement('canvas');
+            canvas.width = 128; canvas.height = 128;
+            const ctx = canvas.getContext('2d');
+            
+            // 绘制爱心路径
+            ctx.beginPath();
+            const topCurveHeight = 40;
+            ctx.moveTo(64, 40);
+            ctx.bezierCurveTo(64, 35, 60, 10, 30, 10);
+            ctx.bezierCurveTo(0, 10, 0, 50, 0, 50);
+            ctx.bezierCurveTo(0, 75, 25, 95, 64, 120);
+            ctx.bezierCurveTo(103, 95, 128, 75, 128, 50);
+            ctx.bezierCurveTo(128, 50, 128, 10, 98, 10);
+            ctx.bezierCurveTo(68, 10, 64, 35, 64, 40);
+            ctx.closePath();
+
+            // 填充粉色
+            ctx.fillStyle = '#FF69B4'; // HotPink
+            ctx.shadowColor = '#FF1493'; // DeepPink glow
+            ctx.shadowBlur = 10;
+            ctx.fill();
+
+            const tex = new THREE.CanvasTexture(canvas);
+            tex.colorSpace = THREE.SRGBColorSpace;
+            return tex;
+        }
+
+        // --- Texture Helper: Text (修改: 调暗描边) ---
         function createTextTexture() {
             const canvas = document.createElement('canvas');
             canvas.width = 1024; 
             canvas.height = 256;
             const ctx = canvas.getContext('2d');
             
-            // 背景透明，绘制发光文字
             ctx.font = 'bold 120px "Microsoft YaHei", sans-serif';
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
             
-            // 发光效果
-            ctx.shadowColor = "rgba(255, 215, 0, 1)";
-            ctx.shadowBlur = 30;
+            // 1. 阴影调暗，防止光晕过度
+            ctx.shadowColor = "rgba(255, 215, 0, 0.4)"; 
+            ctx.shadowBlur = 15;
+            
+            // 2. 填充颜色
             ctx.fillStyle = "#FFFFFF";
             ctx.fillText("初初圣诞快乐", 512, 128);
             
-            // 再画一层金色的描边增强质感
-            ctx.strokeStyle = "#FFD700";
-            ctx.lineWidth = 4;
+            // 3. 描边改为深褐色/古铜色，增强对比度，避免太亮
+            ctx.strokeStyle = "#8B4513"; // SaddleBrown
+            ctx.lineWidth = 5;
             ctx.strokeText("初初圣诞快乐", 512, 128);
 
             const tex = new THREE.CanvasTexture(canvas);
@@ -172,6 +201,7 @@
         }
 
         const glowTexture = createGlowTexture();
+        const heartTexture = createHeartTexture();
 
         // --- Initialization ---
         async function init() {
@@ -202,8 +232,8 @@
 
             scene.add(mainGroup);
             createGlowingParticles();
-            createPhotos();
-            createGreetingObject(); // 创建文字对象
+            createHearts(); // 改名为创建爱心
+            createGreetingObject();
 
             window.addEventListener('resize', onWindowResize);
             
@@ -217,15 +247,14 @@
             const material = new THREE.SpriteMaterial({ 
                 map: texture, 
                 transparent: true, 
-                opacity: 0, // 初始隐藏
+                opacity: 0, 
                 depthWrite: false,
-                blending: THREE.AdditiveBlending // 发光叠加混合
+                blending: THREE.AdditiveBlending 
             });
             greetingSprite = new THREE.Sprite(material);
-            // 初始大小和位置
             greetingSprite.scale.set(60, 15, 1); 
-            greetingSprite.position.set(0, 0, 10); // 稍微靠前
-            scene.add(greetingSprite); // 直接加到场景，不加到 mainGroup 以免旋转太快
+            greetingSprite.position.set(0, 0, 10);
+            scene.add(greetingSprite);
         }
 
         function createGlowingParticles() {
@@ -250,7 +279,7 @@
                 
                 const treePos = new THREE.Vector3(Math.cos(angle)*r, height, Math.sin(angle)*r);
                 const scatterPos = new THREE.Vector3(
-                    (Math.random()-0.5) * 180, // 散开得更广一些，给文字留空间
+                    (Math.random()-0.5) * 180, 
                     (Math.random()-0.5) * 120,
                     (Math.random()-0.5) * 120
                 );
@@ -272,26 +301,22 @@
             }
         }
 
-        function createPhotos() {
-            const geo = new THREE.PlaneGeometry(8, 6);
-            const loader = new THREE.TextureLoader();
+        function createHearts() {
+            // 使用正方形平面来显示爱心纹理
+            const geo = new THREE.PlaneGeometry(5, 5); 
             
-            const texture = loader.load('123.png');
-            texture.colorSpace = THREE.SRGBColorSpace;
-            
+            // 使用简单的 MeshBasicMaterial，开启透明
             const mat = new THREE.MeshBasicMaterial({ 
-                map: texture, 
-                side: THREE.DoubleSide
+                map: heartTexture, 
+                side: THREE.DoubleSide,
+                transparent: true,
+                depthWrite: false // 避免遮挡发光粒子
             });
 
             for(let i=0; i<CONFIG.photoCount; i++) {
                 const mesh = new THREE.Mesh(geo, mat);
 
-                const frameGeo = new THREE.PlaneGeometry(8.5, 6.5);
-                const frameMat = new THREE.MeshBasicMaterial({ color: 0xFFD700 });
-                const frame = new THREE.Mesh(frameGeo, frameMat);
-                frame.position.z = -0.05;
-                mesh.add(frame);
+                // 移除原有的黄色方框 Frame
 
                 const percent = Math.random();
                 const angle = percent * Math.PI * 14;
@@ -321,45 +346,38 @@
         function updateParticles(dt, time) {
             const lerpSpeed = 2.5 * dt;
 
-            // 1. 处理文字显示逻辑
+            // 1. GREETING Logic
             if (currentState === STATE.GREETING) {
-                // 淡入并放大
                 greetingSprite.material.opacity = THREE.MathUtils.lerp(greetingSprite.material.opacity, 1, dt * 2);
                 const s = greetingSprite.scale.x;
-                const targetS = 65; // 目标宽度
+                const targetS = 65; 
                 const newS = THREE.MathUtils.lerp(s, targetS, dt * 2);
                 greetingSprite.scale.set(newS, newS * 0.25, 1);
                 
-                // 让文字轻微浮动
                 greetingSprite.position.y = Math.sin(time) * 2;
-                
-                // 散开背景慢慢旋转
                 mainGroup.rotation.y += 0.05 * dt;
             } else {
-                // 淡出并缩小
                 greetingSprite.material.opacity = THREE.MathUtils.lerp(greetingSprite.material.opacity, 0, dt * 5);
                 const s = greetingSprite.scale.x;
                 const newS = THREE.MathUtils.lerp(s, 30, dt * 5);
                 greetingSprite.scale.set(newS, newS * 0.25, 1);
                 
-                // 圣诞树旋转
                 mainGroup.rotation.y += 0.2 * dt;
                 mainGroup.rotation.x += (0 - mainGroup.rotation.x) * dt;
             }
 
-            // 2. 处理粒子逻辑
+            // 2. Particle Logic
             particles.forEach(p => {
                 let target;
                 if (currentState === STATE.ASSEMBLED) {
                     target = p.treePos;
                 } else {
-                    // 在 GREETING 或 SCATTERED 状态下都使用散开位置
                     target = p.scatterPos;
                 }
 
                 if (currentState === STATE.FOCUSED && p === focusedObject) {
                     const dir = camera.getWorldDirection(new THREE.Vector3());
-                    const focusPos = camera.position.clone().add(dir.multiplyScalar(30));
+                    const focusPos = camera.position.clone().add(dir.multiplyScalar(20)); // 稍微拉近一点
                     p.mesh.position.lerp(focusPos, lerpSpeed);
                     p.mesh.lookAt(camera.position);
                     p.mesh.scale.lerp(new THREE.Vector3(2.5, 2.5, 2.5), lerpSpeed);
@@ -371,11 +389,13 @@
                         const s = p.baseScale * twinkle;
                         p.mesh.scale.set(s,s,s);
                     } else {
-                        p.mesh.scale.lerp(new THREE.Vector3(1, 1, 1), lerpSpeed);
+                        // 爱心缩放跳动效果
+                        const heartbeat = 1 + Math.sin(time * 3 + p.phase) * 0.1;
+                        p.mesh.scale.lerp(new THREE.Vector3(heartbeat, heartbeat, heartbeat), lerpSpeed);
+                        
                         if (currentState === STATE.ASSEMBLED) {
                             p.mesh.lookAt(0, p.treePos.y, 0);
                         } else {
-                            // 散开时稍微随机朝向或者看向相机
                             p.mesh.lookAt(camera.position);
                         }
                     }
@@ -436,7 +456,7 @@
                 if (currentState !== STATE.ASSEMBLED) checkInteract(cx, cy);
             } else {
                 if (currentState === STATE.FOCUSED) {
-                    targetState = STATE.GREETING; // 松手后回到祝福状态
+                    targetState = STATE.GREETING; 
                     focusedObject = null;
                 }
                 
@@ -444,7 +464,6 @@
                     targetState = STATE.ASSEMBLED;
                     status.innerText = "STATUS: TREE MODE";
                 } else if (extended >= 4) {
-                    // --- 修改点：张手触发 GREETING ---
                     targetState = STATE.GREETING;
                     status.innerText = "STATUS: MERRY CHRISTMAS";
                 }
@@ -465,7 +484,7 @@
                 if (hit) {
                     focusedObject = hit;
                     currentState = STATE.FOCUSED;
-                    document.getElementById('status-text').innerText = "STATUS: VIEWING MEMORY";
+                    document.getElementById('status-text').innerText = "STATUS: VIEWING LOVE";
                 }
             }
         }
