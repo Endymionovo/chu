@@ -3,77 +3,94 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Christmas Magic 3D</title>
+    <title>Christmas Magic | Neon Hand</title>
     
     <!-- 1. 基础编译库 -->
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
-    <!-- 2. MediaPipe 核心库 -->
+    <!-- 2. MediaPipe 核心 (全球局加载模式，最稳定) -->
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
 
     <style>
-        body, html { margin: 0; padding: 0; background-color: #000; overflow: hidden; font-family: 'Helvetica Neue', sans-serif; touch-action: none; }
+        body, html { margin: 0; padding: 0; background-color: #050505; overflow: hidden; font-family: 'Helvetica Neue', sans-serif; touch-action: none; }
         #root { width: 100vw; height: 100vh; }
         
-        /* 静态加载层 */
+        /* Loading Overlay */
         #static-loader {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             background: #000; z-index: 99999; display: flex; flex-direction: column;
             align-items: center; justify-content: center; transition: opacity 0.5s;
         }
-        .spinner { width: 40px; height: 40px; border: 4px solid #333; border-top: 4px solid #d4af37; border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 20px; }
+        .spinner { width: 40px; height: 40px; border: 4px solid #333; border-top: 4px solid #00FFFF; border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 20px;}
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
 
-        /* 错误提示弹窗 */
-        .error-modal {
-            position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
-            width: 80%; max-width: 300px; background: rgba(30,30,30,0.95); border: 1px solid #FF4444;
-            padding: 20px; border-radius: 10px; color: #fff; text-align: center; z-index: 200;
-            box-shadow: 0 0 50px rgba(255,0,0,0.2);
-        }
-
-        /* UI */
+        /* UI Layer */
         .ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 10; display: flex; flex-direction: column; justify-content: space-between; }
         .header { text-align: center; padding-top: 5vh; pointer-events: auto; }
         .title {
-            font-size: clamp(2rem, 5vw, 4rem); margin: 0; font-weight: 300;
-            background: linear-gradient(180deg, #fff, #FFD700); -webkit-background-clip: text; color: transparent;
-            text-shadow: 0 0 20px rgba(255, 215, 0, 0.4); letter-spacing: 0.1em;
+            font-size: clamp(2.5rem, 6vw, 5rem); margin: 0; font-weight: 300; letter-spacing: 0.2em;
+            color: #fff; text-shadow: 0 0 10px #FFD700, 0 0 20px #FFD700;
         }
-        .controls { padding: 20px; display: flex; flex-direction: row; align-items: flex-end; gap: 20px; pointer-events: auto; }
-        .cam-box { 
-            width: 120px; height: 90px; background: #111; 
-            border: 1px solid #333; position: relative; border-radius: 8px; overflow: hidden; 
-            transform: scaleX(-1); 
+
+        /* Controls / Monitor Area */
+        .controls { padding: 30px; display: flex; flex-direction: row; align-items: flex-end; gap: 30px; pointer-events: auto; }
+        
+        .monitor-box { 
+            width: 160px; height: 120px; 
+            background: #000; /* 纯黑背景 */
+            border: 2px solid #333; 
+            box-shadow: 0 0 15px rgba(0, 255, 255, 0.2);
+            position: relative; border-radius: 12px; overflow: hidden; 
+            transform: scaleX(-1); /* 镜像翻转 */
         }
-        @media (max-width: 600px) {
-            .controls { flex-direction: column-reverse; align-items: center; padding-bottom: 40px; }
+
+        /* 隐藏真实摄像头画面，但保留元素以供读取数据 */
+        .cam-video { 
+            position: absolute; width: 100%; height: 100%; object-fit: cover; 
+            opacity: 0; /* 关键：完全透明 */
+            z-index: -1;
+        }
+        /* 骨骼绘制层 */
+        .cam-canvas { 
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%; 
+            background: #000; /* 确保背景是黑的 */
         }
         
+        /* Status Text */
+        .status-panel { display: flex; flex-direction: column; gap: 12px; padding-bottom: 10px; }
+        .status-badge {
+            color: #555; font-size: 1rem; font-weight: bold; display: flex; align-items: center; gap: 15px;
+            transition: all 0.2s; padding: 8px 15px; border-radius: 4px; border: 1px solid transparent;
+        }
+        .status-badge.active { background: rgba(0,0,0,0.6); border: 1px solid currentColor; box-shadow: 0 0 15px currentColor; text-shadow: 0 0 10px currentColor; }
+        .dot { width: 10px; height: 10px; background: currentColor; border-radius: 50%; box-shadow: 0 0 5px currentColor; }
+
+        /* Start Screen */
         .start-screen {
-            position: absolute; width: 100%; height: 100%; z-index: 100;
-            display: flex; flex-direction: column; align-items: center; justify-content: center; background: #000;
+            position: absolute; inset: 0; z-index: 100; background: #000;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
         }
         .btn-start {
-            margin-top: 30px; padding: 15px 50px; font-size: 1.2rem;
-            background: transparent; color: #FFD700; border: 1px solid #FFD700;
-            cursor: pointer; text-transform: uppercase; letter-spacing: 2px;
-            border-radius: 50px; transition: 0.3s;
+            margin-top: 40px; padding: 15px 60px; font-size: 1.5rem; letter-spacing: 4px;
+            background: transparent; color: #00FFFF; border: 2px solid #00FFFF;
+            cursor: pointer; text-transform: uppercase; transition: 0.3s;
+            box-shadow: 0 0 20px rgba(0, 255, 255, 0.2);
         }
-        .status-badge {
-            color: #555; font-size: 0.9rem; font-weight: bold; display: flex; align-items: center; gap: 10px;
-            transition: all 0.3s; padding: 5px 10px; border-radius: 20px; background: rgba(255,255,255,0.05);
-        }
-        .status-badge.active { color: #fff; background: rgba(255,215,0,0.2); box-shadow: 0 0 15px rgba(255,215,0,0.2); }
-        .dot { width: 8px; height: 8px; background: currentColor; border-radius: 50%; }
+        .btn-start:hover { background: #00FFFF; color: #000; box-shadow: 0 0 50px rgba(0, 255, 255, 0.8); }
 
-        /* importmap */
+        #debug-log { position: fixed; bottom: 0; left: 0; width: 100%; max-height: 100px; overflow-y: auto; background: rgba(20,0,0,0.9); color: #ff5555; font-size: 11px; padding: 10px; z-index: 10000; display: none; }
         
+        @media (max-width: 600px) {
+            .controls { flex-direction: column-reverse; align-items: center; padding-bottom: 50px; }
+            .monitor-box { width: 140px; height: 105px; }
+            .title { font-size: 2.5rem; }
+        }
     </style>
-    
+
+    <!-- 3. React / Three.js 模块 -->
     <script type="importmap">
     {
         "imports": {
@@ -88,9 +105,21 @@
 <body>
     <div id="static-loader">
         <div class="spinner"></div>
-        <div style="color: #d4af37">INITIALIZING SYSTEM...</div>
+        <div style="color: #00FFFF; font-size: 12px; letter-spacing: 2px;">SYSTEM INITIALIZING</div>
     </div>
+
+    <div id="debug-log"></div>
     <div id="root"></div>
+
+    <script>
+        window.onerror = function(msg, url, line) {
+            const el = document.getElementById('debug-log');
+            el.style.display = 'block';
+            el.innerHTML += `<div>> ${msg} (Line ${line})</div>`;
+            const loader = document.getElementById('static-loader');
+            if(loader) loader.style.display = 'none';
+        };
+    </script>
 
     <script type="text/babel" data-type="module">
         import React, { useState, useEffect, useRef } from 'react';
@@ -105,13 +134,13 @@
 
         const App = () => {
             const [hasStarted, setHasStarted] = useState(false);
-            const [isInitializing, setIsInitializing] = useState(false);
-            const [errorMsg, setErrorMsg] = useState('');
             const [gesture, setGesture] = useState('explode'); 
+            const [debugText, setDebugText] = useState('');
             
             const containerRef = useRef(null);
             const videoRef = useRef(null);
             const canvasRef = useRef(null);
+            
             const sceneRef = useRef(null);
             const particlesRef = useRef(null);
             const starRef = useRef(null);
@@ -128,38 +157,43 @@
                 }
             }, []);
 
-            // Three.js
+            // --- Three.js 场景 ---
             useEffect(() => {
                 if (!hasStarted || !containerRef.current) return;
 
                 const scene = new THREE.Scene();
+                // 纯黑背景
+                scene.background = new THREE.Color(0x000000);
                 scene.fog = new THREE.FogExp2(0x000000, 0.02);
+                
                 const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 100);
-                camera.position.z = 12;
+                camera.position.z = 14;
 
-                const renderer = new THREE.WebGLRenderer({ antialias: true });
+                const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
                 renderer.setSize(window.innerWidth, window.innerHeight);
                 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
                 containerRef.current.appendChild(renderer.domElement);
 
-                // Bloom
+                // 发光特效 (Bloom)
                 const renderScene = new RenderPass(scene, camera);
                 const bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 1.5, 0.4, 0.85);
-                bloomPass.strength = 2.0;
-                bloomPass.radius = 0.5;
+                bloomPass.strength = 2.5; // 增强发光
+                bloomPass.radius = 0.8;
                 bloomPass.threshold = 0;
+                
                 const composer = new EffectComposer(renderer);
                 composer.addPass(renderScene);
                 composer.addPass(bloomPass);
 
-                // Particles
+                // 粒子系统
                 const particleCount = 2000; 
-                const geometry = new THREE.BoxGeometry(0.12, 0.12, 0.12);
+                const geometry = new THREE.BoxGeometry(0.15, 0.15, 0.15); // 小方块
                 const material = new THREE.MeshBasicMaterial({ color: 0xffffff });
                 const mesh = new THREE.InstancedMesh(geometry, material, particleCount);
                 
                 const dummy = new THREE.Object3D();
-                const colors = [0xFFD700, 0xC41E3A, 0x00FF7F, 0x1E90FF, 0xFFFFFF];
+                // 圣诞/星空配色
+                const colors = [0xFFD700, 0xDC143C, 0x00FF7F, 0x00FFFF, 0xFFFFFF]; 
                 const particleData = [];
 
                 for(let i=0; i<particleCount; i++){
@@ -167,21 +201,22 @@
                     dummy.updateMatrix();
                     mesh.setMatrixAt(i, dummy.matrix);
                     mesh.setColorAt(i, new THREE.Color(colors[Math.floor(Math.random()*colors.length)]));
+                    
                     particleData.push({
                         angle: Math.random() * Math.PI * 2,
-                        radius: 3 + Math.random() * 6,
-                        speed: 0.2 + Math.random() * 0.5,
-                        yOffset: (Math.random() - 0.5) * 10
+                        radius: 4 + Math.random() * 8,
+                        speed: 0.1 + Math.random() * 0.4,
+                        offset: Math.random() * 100
                     });
                 }
                 scene.add(mesh);
                 particlesRef.current = mesh;
 
-                // Star
+                // 顶部的星星
                 const starGeo = new THREE.OctahedronGeometry(1.5, 0);
                 const starMat = new THREE.MeshBasicMaterial({ color: 0xFFD700 });
                 const star = new THREE.Mesh(starGeo, starMat);
-                star.position.set(0, 6, 0);
+                star.position.set(0, 7, 0);
                 star.visible = false;
                 scene.add(star);
                 starRef.current = star;
@@ -194,44 +229,62 @@
                 };
                 window.addEventListener('resize', handleResize);
 
+                // 动画循环
                 const clock = new THREE.Clock();
                 const animate = () => {
                     requestAnimationFrame(animate);
                     const time = clock.getElapsedTime();
                     const mode = gestureRef.current;
 
+                    // 星星动画
                     if(mode === 'tree') {
                         if(!star.visible) star.visible = true;
-                        star.rotation.y += 0.03;
+                        star.rotation.y += 0.04;
+                        star.rotation.z = Math.sin(time) * 0.1;
                         star.scale.lerp(new THREE.Vector3(1,1,1), 0.1);
                     } else {
                         star.scale.lerp(new THREE.Vector3(0,0,0), 0.1);
                         if(star.scale.x < 0.01) star.visible = false;
                     }
 
+                    // 粒子动画
                     for(let i=0; i<particleCount; i++){
                         const data = particleData[i];
+                        
                         if (mode === 'tree') {
-                            const height = 12;
-                            const progress = (i / particleCount); 
-                            const targetY = -4 + (progress * height);
-                            const coneRadius = (1 - progress) * 5; 
-                            const spiralAngle = i * 0.5 + time * 1.5;
+                            // 圣诞树形态 (螺旋圆锥)
+                            const height = 14;
+                            const progress = (i / particleCount); // 0 (bottom) to 1 (top)
+                            const targetY = -6 + (progress * height);
+                            
+                            // 树的半径随高度变小
+                            const coneRadius = (1 - progress) * 6; 
+                            const spiralAngle = i * 0.5 + time * 2; // 旋转速度
+
                             const tx = Math.cos(spiralAngle) * coneRadius;
                             const tz = Math.sin(spiralAngle) * coneRadius;
-                            dummy.position.x += (tx - dummy.position.x) * 0.05;
-                            dummy.position.y += (targetY - dummy.position.y) * 0.05;
-                            dummy.position.z += (tz - dummy.position.z) * 0.05;
+
+                            dummy.position.x += (tx - dummy.position.x) * 0.08;
+                            dummy.position.y += (targetY - dummy.position.y) * 0.08;
+                            dummy.position.z += (tz - dummy.position.z) * 0.08;
+                            
+                            dummy.rotation.x = time;
+                            dummy.rotation.y = time;
                         } else {
-                            const tx = Math.sin(time * 0.2 + data.angle) * data.radius * 2;
-                            const ty = Math.cos(time * 0.3 + data.angle) * data.radius + Math.sin(time)*0.5;
-                            const tz = Math.cos(time * 0.1 + i) * data.radius;
+                            // 爆炸星云形态
+                            // 使用正弦波模拟漂浮感
+                            const tx = Math.sin(time * 0.2 + data.angle) * data.radius * 2.5;
+                            const ty = Math.cos(time * 0.3 + data.angle + data.offset) * data.radius;
+                            const tz = Math.sin(time * 0.4 + i) * data.radius * 1.5;
+
                             dummy.position.x += (tx - dummy.position.x) * 0.03;
                             dummy.position.y += (ty - dummy.position.y) * 0.03;
                             dummy.position.z += (tz - dummy.position.z) * 0.03;
+                            
+                            dummy.rotation.x += 0.01;
+                            dummy.rotation.y += 0.02;
                         }
-                        dummy.rotation.x = time + i;
-                        dummy.rotation.y = time + i;
+                        
                         dummy.updateMatrix();
                         mesh.setMatrixAt(i, dummy.matrix);
                     }
@@ -239,6 +292,7 @@
                     composer.render();
                 };
                 animate();
+
                 return () => {
                     window.removeEventListener('resize', handleResize);
                     containerRef.current.innerHTML = '';
@@ -246,89 +300,133 @@
                 };
             }, [hasStarted]);
 
-            // MediaPipe & Camera
+            // --- AI 视觉识别 (核心改进) ---
             useEffect(() => {
                 if(!hasStarted) return;
-                setIsInitializing(true);
-
-                if (!MediaPipeHands || !MediaPipeCamera) {
-                    setErrorMsg("AI 引擎加载失败，请刷新重试");
-                    setIsInitializing(false);
+                
+                if (!MediaPipeHands) {
+                    setDebugText("AI Engine Missing");
                     return;
                 }
 
-                const hands = new MediaPipeHands({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`});
-                hands.setOptions({ maxNumHands: 1, modelComplexity: 0, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 });
+                const hands = new MediaPipeHands({locateFile: (file) => {
+                    return `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`;
+                }});
+
+                hands.setOptions({
+                    maxNumHands: 1,
+                    modelComplexity: 1, // 提高精度
+                    minDetectionConfidence: 0.6,
+                    minTrackingConfidence: 0.6
+                });
 
                 hands.onResults((results) => {
-                    const ctx = canvasRef.current.getContext('2d');
-                    ctx.save();
-                    ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+                    const canvas = canvasRef.current;
+                    const ctx = canvas.getContext('2d');
+                    
+                    // 1. 全黑背景清屏
+                    ctx.fillStyle = "#000000";
+                    ctx.fillRect(0, 0, canvas.width, canvas.height);
+                    
                     if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
                         const landmarks = results.multiHandLandmarks[0];
-                        if(window.drawConnectors) window.drawConnectors(ctx, landmarks, window.HAND_CONNECTIONS, {color: '#00FF00', lineWidth: 2});
-                        if(window.drawLandmarks) window.drawLandmarks(ctx, landmarks, {color: '#FF0000', lineWidth: 1});
+                        
+                        // 2. 绘制骨骼 - 赛博朋克风格
+                        if(window.drawConnectors) {
+                            // 连线：霓虹青色
+                            window.drawConnectors(ctx, landmarks, window.HAND_CONNECTIONS, {color: '#00FFFF', lineWidth: 4});
+                        }
+                        if(window.drawLandmarks) {
+                            // 关节：霓虹粉色
+                            window.drawLandmarks(ctx, landmarks, {color: '#FF00FF', lineWidth: 2, radius: 3});
+                        }
 
+                        // 3. 改进的手势算法 (比例法，不依赖距离)
                         const wrist = landmarks[0];
-                        const tips = [8, 12, 16, 20];
-                        let extendedCount = 0;
-                        tips.forEach(t => {
-                            if (Math.hypot(landmarks[t].x - wrist.x, landmarks[t].y - wrist.y) > 0.25) extendedCount++;
-                        });
-                        if (extendedCount <= 1) setGesture('tree');
-                        else if (extendedCount >= 3) setGesture('explode');
+                        
+                        // 定义辅助函数：计算两点距离
+                        const getDist = (p1, p2) => Math.hypot(p1.x - p2.x, p1.y - p2.y);
+
+                        // 检查四指是否伸展 (Index, Middle, Ring, Pinky)
+                        // 逻辑：如果 指尖到手腕的距离 > 指关节到手腕的距离，则认为是伸展的
+                        const fingerIndices = [8, 12, 16, 20]; // Tips
+                        const knuckleIndices = [5, 9, 13, 17]; // PIPs (Knuckles)
+                        
+                        let extendedFingers = 0;
+                        
+                        // 检查食指到小指
+                        for (let i = 0; i < 4; i++) {
+                            const tipDist = getDist(landmarks[fingerIndices[i]], wrist);
+                            const knuckleDist = getDist(landmarks[knuckleIndices[i]], wrist);
+                            // 增加 1.1 的系数作为阈值，防止临界状态抖动
+                            if (tipDist > knuckleDist * 1.1) {
+                                extendedFingers++;
+                            }
+                        }
+
+                        // 检查大拇指 (Thumb) - 逻辑稍有不同，看它是否远离手掌中心
+                        // 简单起见，如果其他4指伸展，通常就是Open
+                        
+                        // 判定逻辑
+                        // 0-1 指伸展 -> 握拳 (Tree)
+                        // 3-4 指伸展 -> 张开 (Explode)
+                        if (extendedFingers <= 1) {
+                            setGesture('tree');
+                        } else if (extendedFingers >= 3) {
+                            setGesture('explode');
+                        }
+                    } else {
+                        // 如果没检测到手，保持 Monitor 黑色，不要画之前的残影
                     }
-                    ctx.restore();
                 });
 
                 const camera = new MediaPipeCamera(videoRef.current, {
-                    onFrame: async () => { await hands.send({image: videoRef.current}); },
-                    width: 320, height: 240
+                    onFrame: async () => {
+                        await hands.send({image: videoRef.current});
+                    },
+                    width: 320,
+                    height: 240
                 });
                 
                 camera.start()
-                    .then(() => { setIsInitializing(false); })
-                    .catch(err => {
-                        setIsInitializing(false);
-                        // 针对性错误提示
-                        if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
-                            setErrorMsg("⚠️ 权限被拒绝\n请在手机设置或浏览器地址栏\n允许访问摄像头");
-                        } else {
-                            setErrorMsg("相机错误: " + err.message);
-                        }
-                    });
+                    .then(() => setDebugText(''))
+                    .catch(err => setDebugText('Cam Error: ' + err.message));
 
             }, [hasStarted]);
 
             return (
                 <React.Fragment>
-                    {/* 错误提示层 */}
-                    {errorMsg && (
-                        <div className="error-modal">
-                            <div style={{fontSize:'30px', marginBottom:'10px'}}>🚫</div>
-                            <div style={{whiteSpace: 'pre-line', lineHeight: '1.5'}}>{errorMsg}</div>
-                            <button onClick={() => window.location.reload()} style={{marginTop:'15px', padding:'8px 20px', background:'#FF4444', border:'none', color:'white', borderRadius:'5px'}}>刷新重试</button>
-                        </div>
-                    )}
-
                     {!hasStarted ? (
                         <div className="start-screen">
-                            <h1 className="title">MERRY CHRISTMAS</h1>
-                            <button className="btn-start" onClick={() => setHasStarted(true)}>Start</button>
-                            <p style={{color:'#888', marginTop:'15px', fontSize:'0.8rem'}}>Need Camera Access</p>
+                            <h1 className="title">CHRISTMAS</h1>
+                            <button className="btn-start" onClick={() => setHasStarted(true)}>
+                                START
+                            </button>
+                            <p style={{color:'#666', marginTop:'20px', fontSize:'0.8rem'}}>Access Camera to Play</p>
                         </div>
                     ) : (
                         <div className="ui-layer">
-                            <div className="header"><h1 className="title">MERRY CHRISTMAS</h1></div>
+                            <div className="header">
+                                <h1 className="title">MERRY CHRISTMAS</h1>
+                            </div>
+                            
                             <div className="controls">
-                                <div className="cam-box">
+                                <div className="monitor-box">
                                     <video ref={videoRef} className="cam-video" playsInline webkit-playsinline="true" muted></video>
                                     <canvas ref={canvasRef} className="cam-canvas" width="320" height="240"></canvas>
-                                    {isInitializing && <div style={{position:'absolute', inset:0, background:'rgba(0,0,0,0.8)', display:'flex', alignItems:'center', justifyContent:'center', color:'#d4af37'}}>Connecting...</div>}
+                                    
+                                    {/* 监控框左上角的装饰字 */}
+                                    <div style={{position:'absolute', top:5, left:5, color:'#00FFFF', fontSize:'10px', fontFamily:'monospace'}}>SIGNAL: ACTIVE</div>
+                                    {debugText && <div style={{position:'absolute', bottom:5, left:5, color:'red', fontSize:'10px'}}>{debugText}</div>}
                                 </div>
+                                
                                 <div className="status-panel">
-                                    <div className={`status-badge ${gesture === 'explode' ? 'active' : ''}`} style={{color: '#87CEEB'}}><div className="dot"></div> OPEN HAND</div>
-                                    <div className={`status-badge ${gesture === 'tree' ? 'active' : ''}`} style={{color: '#FFD700'}}><div className="dot"></div> FIST (TREE)</div>
+                                    <div className={`status-badge ${gesture === 'explode' ? 'active' : ''}`} style={{color: '#00FFFF'}}>
+                                        <div className="dot"></div> OPEN HAND (EXPLODE)
+                                    </div>
+                                    <div className={`status-badge ${gesture === 'tree' ? 'active' : ''}`} style={{color: '#FFD700'}}>
+                                        <div className="dot"></div> FIST (TREE)
+                                    </div>
                                 </div>
                             </div>
                         </div>
