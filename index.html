@@ -1,510 +1,361 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Magic Glowing Christmas Tree</title>
+    <title>Magical Christmas 3D</title>
+    
     <style>
-        body { margin: 0; overflow: hidden; background-color: #000205; font-family: 'Helvetica Neue', sans-serif; }
-        #canvas-container { width: 100vw; height: 100vh; position: absolute; top: 0; left: 0; z-index: 1; }
+        body, html { margin: 0; padding: 0; background-color: #000; overflow: hidden; font-family: sans-serif; }
+        #root { width: 100vw; height: 100vh; }
         
-        /* UI Overlay */
-        #ui-layer {
-            position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 10;
-            display: flex; flex-direction: column; justify-content: space-between; padding: 30px; box-sizing: border-box;
-            background: radial-gradient(circle at center, transparent 0%, #000000 120%);
+        /* 初始加载文字 */
+        #static-loading {
+            position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            color: #d4af37; font-size: 20px; text-align: center;
+            z-index: 9999;
         }
 
-        .header h1 {
-            color: #fff; font-weight: 100; letter-spacing: 8px; text-transform: uppercase; font-size: 20px;
-            text-shadow: 0 0 20px rgba(255, 215, 0, 0.8); margin: 0; text-align: center;
+        /* 错误提示框 */
+        #error-log {
+            position: fixed; bottom: 0; left: 0; width: 100%; background: rgba(50, 0, 0, 0.9);
+            color: #ffcccc; padding: 10px; font-family: monospace; font-size: 12px;
+            display: none; z-index: 10000; max-height: 200px; overflow: auto; border-top: 2px solid red;
         }
-        .status { color: #87ceeb; font-size: 12px; margin-top: 8px; text-align: center; opacity: 0.7; letter-spacing: 2px; }
 
-        .controls {
-            pointer-events: auto;
-            background: rgba(0, 10, 20, 0.4);
-            backdrop-filter: blur(8px);
-            padding: 20px; border-radius: 8px; border: 1px solid rgba(255, 255, 255, 0.1);
-            align-self: flex-start;
+        /* UI Styles */
+        .ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; display: flex; flex-direction: column; justify-content: space-between; z-index: 10; }
+        .header { text-align: center; padding-top: 40px; pointer-events: auto; }
+        .title {
+            font-family: 'Times New Roman', serif; font-size: 3rem; margin: 0;
+            background: linear-gradient(180deg, #fff, #FFD700); -webkit-background-clip: text; color: transparent;
+            text-shadow: 0 0 20px rgba(255, 215, 0, 0.4);
         }
+        .controls { padding: 30px; display: flex; align-items: flex-end; gap: 20px; pointer-events: auto; }
+        .cam-box { width: 200px; height: 150px; background: #111; border: 1px solid #333; position: relative; border-radius: 8px; overflow: hidden; transform: scaleX(-1); }
+        .cam-video { width: 100%; height: 100%; object-fit: cover; opacity: 0.5; }
+        .cam-canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
         
-        .tips { color: rgba(255,255,255,0.5); font-size: 12px; margin-top: 0; line-height: 1.8; }
-        .key { color: #fff; font-weight: bold; border-bottom: 1px solid #555; }
+        /* Start Screen */
+        .start-screen {
+            position: fixed; inset: 0; background: #000; z-index: 100; display: flex; flex-direction: column;
+            align-items: center; justify-content: center; transition: opacity 0.8s;
+        }
+        .btn-start {
+            margin-top: 30px; padding: 15px 40px; font-size: 1.2rem;
+            background: transparent; color: #FFD700; border: 2px solid #FFD700;
+            cursor: pointer; text-transform: uppercase; letter-spacing: 2px;
+            transition: 0.3s; box-shadow: 0 0 15px rgba(255, 215, 0, 0.2);
+        }
+        .btn-start:hover { background: #FFD700; color: #000; box-shadow: 0 0 30px rgba(255, 215, 0, 0.6); }
 
-        #hand-preview {
-            position: absolute; bottom: 30px; right: 30px; width: 160px; height: 120px; 
-            border: 1px solid rgba(255,255,255,0.2); border-radius: 8px; opacity: 0.6; transform: scaleX(-1);
-            z-index: 100; background: rgba(0,0,0,0.3);
+        .status-badge {
+            color: #555; font-weight: bold; margin-bottom: 5px; display: flex; align-items: center; gap: 10px;
         }
-
-        #cursor {
-            position: absolute; width: 60px; height: 60px; border: 1px solid rgba(255, 255, 255, 0.5); border-radius: 50%;
-            transform: translate(-50%, -50%); pointer-events: none; display: none;
-            box-shadow: 0 0 20px rgba(255, 255, 255, 0.2); transition: width 0.3s, height 0.3s, border-color 0.3s;
-            z-index: 20; mix-blend-mode: screen;
-        }
-        #cursor::after {
-            content: ''; position: absolute; top: 50%; left: 50%; width: 4px; height: 4px; background: #fff;
-            transform: translate(-50%, -50%); border-radius: 50%; box-shadow: 0 0 10px #fff;
-        }
-        #cursor.pinching { width: 30px; height: 30px; border-color: #ffd700; background: rgba(255, 215, 0, 0.1); box-shadow: 0 0 30px #ffd700; }
-        
-        .loading { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: rgba(255,255,255,0.8); font-size: 14px; letter-spacing: 2px; }
-        #input-video { display: none; }
+        .status-badge.active { color: #fff; text-shadow: 0 0 10px currentColor; }
+        .dot { width: 10px; height: 10px; background: currentColor; border-radius: 50%; }
+        .active .dot { box-shadow: 0 0 10px currentColor; }
     </style>
-</head>
-<body>
 
-    <div id="ui-layer">
-        <div class="header">
-            <h1>LUMINOUS CHRISTMAS</h1>
-            <div class="status" id="status-text">SYSTEM READY</div>
-        </div>
-
-        <div class="controls">
-            <div class="tips">
-                <div><span class="key">Open Hand</span> : Show Greeting</div>
-                <div><span class="key">Fist</span> : Assemble Tree</div>
-                <div><span class="key">Pinch</span> : Grab Heart</div>
-            </div>
-        </div>
-    </div>
-
-    <canvas id="hand-preview"></canvas>
-    <div id="cursor"></div>
-    <div id="canvas-container"></div>
-    <video id="input-video"></video>
-    <div id="loading" class="loading">Loading AI Vision & Graphics...</div>
-
+    <!-- Import Map -->
     <script type="importmap">
     {
         "imports": {
-            "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
-            "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/",
-            "@mediapipe/hands": "https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/hands.js",
-            "@mediapipe/camera_utils": "https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js",
-            "@mediapipe/drawing_utils": "https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"
+            "react": "https://esm.sh/react@18.2.0",
+            "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
+            "three": "https://esm.sh/three@0.160.0",
+            "three/addons/": "https://esm.sh/three@0.160.0/examples/jsm/",
+            "@mediapipe/hands": "https://esm.sh/@mediapipe/hands@0.4.1675469240",
+            "@mediapipe/camera_utils": "https://esm.sh/@mediapipe/camera_utils@0.3.1675466862",
+            "@mediapipe/drawing_utils": "https://esm.sh/@mediapipe/drawing_utils@0.3.1675466124"
         }
     }
     </script>
+</head>
+<body>
+    <div id="static-loading">Initialize System...<br><span style="font-size:12px; opacity:0.6">Please wait for scripts to load</span></div>
+    <div id="error-log"></div>
+    <div id="root"></div>
+
+    <script>
+        // 全局错误捕获，如果黑屏会显示原因
+        window.onerror = function(msg, url, line, col, error) {
+            const div = document.getElementById('error-log');
+            div.style.display = 'block';
+            div.innerHTML += `<div>[Error] ${msg} <br> <small>${url}:${line}</small></div>`;
+            document.getElementById('static-loading').style.display = 'none';
+        };
+    </script>
 
     <script type="module">
+        import React, { useState, useEffect, useRef } from 'react';
+        import { createRoot } from 'react-dom/client';
         import * as THREE from 'three';
         import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
         import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
         import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
-        
-        const loadScript = (src) => new Promise((resolve, reject) => {
-            const s = document.createElement('script');
-            s.src = src; s.onload = resolve; s.onerror = reject; s.crossOrigin = "anonymous";
-            document.head.appendChild(s);
-        });
+        import { Hands } from '@mediapipe/hands';
+        import { Camera } from '@mediapipe/camera_utils';
+        import { drawConnectors, drawLandmarks } from '@mediapipe/drawing_utils';
 
-        // --- Config ---
-        const CONFIG = {
-            particleCount: 1200, 
-            photoCount: 20, // 稍微增加心形的数量
-            treeHeight: 65,
-            treeRadius: 28,
-            colors: [0x4CC9F0, 0x4361EE, 0xF72585, 0xFFD700, 0xFFFFFF], 
-            bloom: { threshold: 0, strength: 2.5, radius: 0.8 } 
+        // 移除 loading 文字
+        document.getElementById('static-loading').style.display = 'none';
+
+        const App = () => {
+            const [hasStarted, setHasStarted] = useState(false);
+            const [gesture, setGesture] = useState('explode'); // 'explode' | 'tree'
+            const [debugMsg, setDebugMsg] = useState('');
+            
+            const containerRef = useRef(null);
+            const videoRef = useRef(null);
+            const canvasRef = useRef(null);
+            
+            // Refs for Three.js animation
+            const sceneRef = useRef(null);
+            const particlesRef = useRef(null);
+            const starRef = useRef(null);
+            const gestureRef = useRef('explode');
+
+            useEffect(() => { gestureRef.current = gesture; }, [gesture]);
+
+            // 1. 初始化 Three.js
+            useEffect(() => {
+                if (!hasStarted || !containerRef.current) return;
+
+                // Scene
+                const scene = new THREE.Scene();
+                scene.fog = new THREE.FogExp2(0x000000, 0.02);
+                const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 100);
+                camera.position.z = 12;
+
+                const renderer = new THREE.WebGLRenderer({ antialias: true });
+                renderer.setSize(window.innerWidth, window.innerHeight);
+                renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+                containerRef.current.appendChild(renderer.domElement);
+
+                // Post Processing
+                const renderScene = new RenderPass(scene, camera);
+                const bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 1.5, 0.4, 0.85);
+                bloomPass.strength = 2.0;
+                bloomPass.radius = 0.5;
+                bloomPass.threshold = 0;
+
+                const composer = new EffectComposer(renderer);
+                composer.addPass(renderScene);
+                composer.addPass(bloomPass);
+
+                // Particles
+                const particleCount = 3000;
+                const geometry = new THREE.BoxGeometry(0.15, 0.15, 0.15);
+                const material = new THREE.MeshBasicMaterial({ color: 0xffffff });
+                const mesh = new THREE.InstancedMesh(geometry, material, particleCount);
+                
+                const dummy = new THREE.Object3D();
+                const colors = [0xFFD700, 0xC41E3A, 0x00FF00, 0x00BFFF];
+                const particleData = [];
+
+                for(let i=0; i<particleCount; i++){
+                    dummy.position.random().subScalar(0.5).multiplyScalar(20);
+                    dummy.updateMatrix();
+                    mesh.setMatrixAt(i, dummy.matrix);
+                    mesh.setColorAt(i, new THREE.Color(colors[Math.floor(Math.random()*colors.length)]));
+                    
+                    particleData.push({
+                        x: dummy.position.x, y: dummy.position.y, z: dummy.position.z,
+                        speed: 0.01 + Math.random() * 0.05,
+                        angle: Math.random() * Math.PI * 2,
+                        radius: 5 + Math.random() * 5
+                    });
+                }
+                scene.add(mesh);
+                particlesRef.current = mesh;
+
+                // Star
+                const starGeo = new THREE.OctahedronGeometry(1, 0);
+                const starMat = new THREE.MeshBasicMaterial({ color: 0xFFD700 });
+                const star = new THREE.Mesh(starGeo, starMat);
+                star.position.set(0, 5, 0);
+                star.visible = false;
+                scene.add(star);
+                starRef.current = star;
+
+                // Resize
+                const handleResize = () => {
+                    camera.aspect = window.innerWidth / window.innerHeight;
+                    camera.updateProjectionMatrix();
+                    renderer.setSize(window.innerWidth, window.innerHeight);
+                    composer.setSize(window.innerWidth, window.innerHeight);
+                };
+                window.addEventListener('resize', handleResize);
+
+                // Loop
+                const clock = new THREE.Clock();
+                const animate = () => {
+                    requestAnimationFrame(animate);
+                    const time = clock.getElapsedTime();
+                    const mode = gestureRef.current;
+
+                    // Update Star
+                    if(mode === 'tree') {
+                        star.visible = true;
+                        star.rotation.y += 0.02;
+                        star.scale.lerp(new THREE.Vector3(1.5,1.5,1.5), 0.1);
+                    } else {
+                        star.scale.lerp(new THREE.Vector3(0,0,0), 0.1);
+                        if(star.scale.x < 0.01) star.visible = false;
+                    }
+
+                    // Update Particles
+                    for(let i=0; i<particleCount; i++){
+                        const data = particleData[i];
+                        
+                        if (mode === 'tree') {
+                            // Tree Logic (Cone Spiral)
+                            const h = 10;
+                            const ratio = i / particleCount;
+                            const targetY = (ratio * h) - (h/2);
+                            const r = (1 - ratio) * 4; // Cone radius
+                            const angle = i * 0.5 + time;
+                            
+                            const tx = Math.cos(angle) * r;
+                            const tz = Math.sin(angle) * r;
+                            
+                            dummy.position.x += (tx - dummy.position.x) * 0.05;
+                            dummy.position.y += (targetY - dummy.position.y) * 0.05;
+                            dummy.position.z += (tz - dummy.position.z) * 0.05;
+                        } else {
+                            // Explode Logic (Nebula)
+                            const tx = Math.sin(time * 0.5 + data.angle) * data.radius * 1.5;
+                            const ty = Math.cos(time * 0.3 + data.angle) * data.radius;
+                            const tz = Math.sin(time * 0.2 + i) * data.radius;
+
+                            dummy.position.x += (tx - dummy.position.x) * 0.02;
+                            dummy.position.y += (ty - dummy.position.y) * 0.02;
+                            dummy.position.z += (tz - dummy.position.z) * 0.02;
+                        }
+                        
+                        dummy.rotation.x += 0.01;
+                        dummy.rotation.y += 0.01;
+                        dummy.updateMatrix();
+                        mesh.setMatrixAt(i, dummy.matrix);
+                    }
+                    mesh.instanceMatrix.needsUpdate = true;
+
+                    composer.render();
+                };
+                animate();
+
+                return () => {
+                    window.removeEventListener('resize', handleResize);
+                    containerRef.current.innerHTML = '';
+                }
+            }, [hasStarted]);
+
+            // 2. 初始化 MediaPipe
+            useEffect(() => {
+                if(!hasStarted) return;
+
+                const onResults = (results) => {
+                    const ctx = canvasRef.current.getContext('2d');
+                    ctx.save();
+                    ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+                    
+                    if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+                        const landmarks = results.multiHandLandmarks[0];
+                        drawConnectors(ctx, landmarks, Hands.HAND_CONNECTIONS, {color: '#00FF00', lineWidth: 2});
+                        drawLandmarks(ctx, landmarks, {color: '#FF0000', lineWidth: 1});
+
+                        // 简单的手势判断：指尖到手腕距离
+                        const wrist = landmarks[0];
+                        const tips = [8, 12, 16, 20]; // 食指、中指、无名指、小指
+                        let openFingers = 0;
+                        tips.forEach(tipIdx => {
+                            const tip = landmarks[tipIdx];
+                            const pip = landmarks[tipIdx - 2]; 
+                            // 简单判定：指尖离手腕比指关节远
+                            const dTip = Math.hypot(tip.x - wrist.x, tip.y - wrist.y);
+                            const dPip = Math.hypot(pip.x - wrist.x, pip.y - wrist.y);
+                            if (dTip > dPip) openFingers++;
+                        });
+
+                        if (openFingers <= 1) setGesture('tree');
+                        else if (openFingers >= 3) setGesture('explode');
+                    }
+                    ctx.restore();
+                };
+
+                const hands = new Hands({locateFile: (file) => {
+                    return `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`;
+                }});
+
+                hands.setOptions({
+                    maxNumHands: 1,
+                    modelComplexity: 1,
+                    minDetectionConfidence: 0.5,
+                    minTrackingConfidence: 0.5
+                });
+                hands.onResults(onResults);
+
+                const camera = new Camera(videoRef.current, {
+                    onFrame: async () => {
+                        await hands.send({image: videoRef.current});
+                    },
+                    width: 320,
+                    height: 240
+                });
+                
+                camera.start().catch(err => {
+                    setDebugMsg("Camera failed: " + err.message);
+                });
+                
+                return () => { camera.stop(); }
+
+            }, [hasStarted]);
+
+            return (
+                <>
+                    {!hasStarted && (
+                        <div className="start-screen">
+                            <h1 className="title">MERRY CHRISTMAS</h1>
+                            <button className="btn-start" onClick={() => setHasStarted(true)}>
+                                Enter Magic World
+                            </button>
+                            <p style={{color:'#666', marginTop:'20px'}}>
+                                Requires Camera Access • Best viewed on Desktop
+                            </p>
+                        </div>
+                    )}
+
+                    <div className="ui-layer" style={{opacity: hasStarted ? 1 : 0}}>
+                        <div className="header">
+                            <h1 className="title">MERRY CHRISTMAS</h1>
+                        </div>
+                        
+                        <div className="controls">
+                            <div className="cam-box">
+                                <video ref={videoRef} className="cam-video" playsInline></video>
+                                <canvas ref={canvasRef} className="cam-canvas" width="320" height="240"></canvas>
+                                {debugMsg && <div style={{position:'absolute',top:0,color:'red',fontSize:10}}>{debugMsg}</div>}
+                            </div>
+                            
+                            <div>
+                                <div className={`status-badge ${gesture === 'explode' ? 'active' : ''}`} style={{color: '#00BFFF'}}>
+                                    <div className="dot"></div> EXPLODE (OPEN HAND)
+                                </div>
+                                <div className={`status-badge ${gesture === 'tree' ? 'active' : ''}`} style={{color: '#FFD700'}}>
+                                    <div className="dot"></div> TREE (FIST)
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div ref={containerRef} style={{position:'absolute', top:0, left:0, zIndex:1}}></div>
+                </>
+            );
         };
 
-        // --- Globals ---
-        let scene, camera, renderer, composer;
-        let particles = [], mainGroup = new THREE.Group();
-        let greetingSprite; 
-        const clock = new THREE.Clock();
-        
-        const STATE = { ASSEMBLED: 'ASSEMBLED', GREETING: 'GREETING', FOCUSED: 'FOCUSED' };
-        let currentState = STATE.ASSEMBLED;
-        let targetState = STATE.ASSEMBLED;
-        
-        let mouse = new THREE.Vector2(), raycaster = new THREE.Raycaster();
-        let focusedObject = null;
-        let cameraTargetRot = { x: 0, y: 0 };
-
-        // --- Texture Helper: Glow Dot ---
-        function createGlowTexture() {
-            const canvas = document.createElement('canvas');
-            canvas.width = 64; canvas.height = 64;
-            const ctx = canvas.getContext('2d');
-            const gradient = ctx.createRadialGradient(32,32,0, 32,32,32);
-            gradient.addColorStop(0, 'rgba(255,255,255,1)'); 
-            gradient.addColorStop(0.3, 'rgba(255,255,255,0.4)'); 
-            gradient.addColorStop(0.5, 'rgba(255,255,255,0.1)'); 
-            gradient.addColorStop(1, 'rgba(0,0,0,0)'); 
-            ctx.fillStyle = gradient;
-            ctx.fillRect(0,0,64,64);
-            const tex = new THREE.CanvasTexture(canvas);
-            tex.colorSpace = THREE.SRGBColorSpace;
-            return tex;
-        }
-
-        // --- Texture Helper: Pink Heart (新: 绘制爱心) ---
-        function createHeartTexture() {
-            const canvas = document.createElement('canvas');
-            canvas.width = 128; canvas.height = 128;
-            const ctx = canvas.getContext('2d');
-            
-            // 绘制爱心路径
-            ctx.beginPath();
-            const topCurveHeight = 40;
-            ctx.moveTo(64, 40);
-            ctx.bezierCurveTo(64, 35, 60, 10, 30, 10);
-            ctx.bezierCurveTo(0, 10, 0, 50, 0, 50);
-            ctx.bezierCurveTo(0, 75, 25, 95, 64, 120);
-            ctx.bezierCurveTo(103, 95, 128, 75, 128, 50);
-            ctx.bezierCurveTo(128, 50, 128, 10, 98, 10);
-            ctx.bezierCurveTo(68, 10, 64, 35, 64, 40);
-            ctx.closePath();
-
-            // 填充粉色
-            ctx.fillStyle = '#FF69B4'; // HotPink
-            ctx.shadowColor = '#FF1493'; // DeepPink glow
-            ctx.shadowBlur = 10;
-            ctx.fill();
-
-            const tex = new THREE.CanvasTexture(canvas);
-            tex.colorSpace = THREE.SRGBColorSpace;
-            return tex;
-        }
-
-        // --- Texture Helper: Text (修改: 调暗描边) ---
-        function createTextTexture() {
-            const canvas = document.createElement('canvas');
-            canvas.width = 1024; 
-            canvas.height = 256;
-            const ctx = canvas.getContext('2d');
-            
-            ctx.font = 'bold 120px "Microsoft YaHei", sans-serif';
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-            
-            // 1. 阴影调暗，防止光晕过度
-            ctx.shadowColor = "rgba(255, 215, 0, 0.4)"; 
-            ctx.shadowBlur = 15;
-            
-            // 2. 填充颜色
-            ctx.fillStyle = "#FFFFFF";
-            ctx.fillText("初初圣诞快乐", 512, 128);
-            
-            // 3. 描边改为深褐色/古铜色，增强对比度，避免太亮
-            ctx.strokeStyle = "#8B4513"; // SaddleBrown
-            ctx.lineWidth = 5;
-            ctx.strokeText("初初圣诞快乐", 512, 128);
-
-            const tex = new THREE.CanvasTexture(canvas);
-            tex.colorSpace = THREE.SRGBColorSpace;
-            return tex;
-        }
-
-        const glowTexture = createGlowTexture();
-        const heartTexture = createHeartTexture();
-
-        // --- Initialization ---
-        async function init() {
-            const container = document.getElementById('canvas-container');
-            
-            scene = new THREE.Scene();
-            scene.background = new THREE.Color(0x000103); 
-            scene.fog = new THREE.FogExp2(0x000103, 0.005); 
-
-            camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
-            camera.position.set(0, 10, 100);
-
-            renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: "high-performance" });
-            renderer.setSize(window.innerWidth, window.innerHeight);
-            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-            renderer.toneMapping = THREE.ReinhardToneMapping;
-            container.appendChild(renderer.domElement);
-
-            const renderScene = new RenderPass(scene, camera);
-            const bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 1.5, 0.4, 0.85);
-            bloomPass.threshold = CONFIG.bloom.threshold;
-            bloomPass.strength = CONFIG.bloom.strength;
-            bloomPass.radius = CONFIG.bloom.radius;
-            
-            composer = new EffectComposer(renderer);
-            composer.addPass(renderScene);
-            composer.addPass(bloomPass);
-
-            scene.add(mainGroup);
-            createGlowingParticles();
-            createHearts(); // 改名为创建爱心
-            createGreetingObject();
-
-            window.addEventListener('resize', onWindowResize);
-            
-            await setupMediaPipe();
-            document.getElementById('loading').style.display = 'none';
-            animate();
-        }
-
-        function createGreetingObject() {
-            const texture = createTextTexture();
-            const material = new THREE.SpriteMaterial({ 
-                map: texture, 
-                transparent: true, 
-                opacity: 0, 
-                depthWrite: false,
-                blending: THREE.AdditiveBlending 
-            });
-            greetingSprite = new THREE.Sprite(material);
-            greetingSprite.scale.set(60, 15, 1); 
-            greetingSprite.position.set(0, 0, 10);
-            scene.add(greetingSprite);
-        }
-
-        function createGlowingParticles() {
-            for (let i = 0; i < CONFIG.particleCount; i++) {
-                const color = CONFIG.colors[Math.floor(Math.random() * CONFIG.colors.length)];
-                
-                const material = new THREE.SpriteMaterial({
-                    map: glowTexture,
-                    color: color,
-                    transparent: true,
-                    opacity: 0.8 + Math.random() * 0.2,
-                    blending: THREE.AdditiveBlending,
-                    depthWrite: false
-                });
-
-                const sprite = new THREE.Sprite(material);
-
-                const percent = i / CONFIG.particleCount;
-                const angle = percent * Math.PI * 24 + Math.random(); 
-                const height = percent * CONFIG.treeHeight - (CONFIG.treeHeight/2);
-                const r = (1 - percent) * CONFIG.treeRadius + (Math.random() * 2);
-                
-                const treePos = new THREE.Vector3(Math.cos(angle)*r, height, Math.sin(angle)*r);
-                const scatterPos = new THREE.Vector3(
-                    (Math.random()-0.5) * 180, 
-                    (Math.random()-0.5) * 120,
-                    (Math.random()-0.5) * 120
-                );
-
-                const baseS = Math.random() * 1.5 + 0.5;
-                sprite.scale.set(baseS, baseS, baseS);
-                sprite.position.copy(treePos);
-
-                mainGroup.add(sprite);
-
-                particles.push({
-                    mesh: sprite,
-                    treePos: treePos,
-                    scatterPos: scatterPos,
-                    baseScale: baseS,
-                    phase: Math.random() * Math.PI * 2,
-                    isPhoto: false
-                });
-            }
-        }
-
-        function createHearts() {
-            // 使用正方形平面来显示爱心纹理
-            const geo = new THREE.PlaneGeometry(5, 5); 
-            
-            // 使用简单的 MeshBasicMaterial，开启透明
-            const mat = new THREE.MeshBasicMaterial({ 
-                map: heartTexture, 
-                side: THREE.DoubleSide,
-                transparent: true,
-                depthWrite: false // 避免遮挡发光粒子
-            });
-
-            for(let i=0; i<CONFIG.photoCount; i++) {
-                const mesh = new THREE.Mesh(geo, mat);
-
-                // 移除原有的黄色方框 Frame
-
-                const percent = Math.random();
-                const angle = percent * Math.PI * 14;
-                const h = (Math.random() - 0.5) * (CONFIG.treeHeight * 0.8);
-                const r = ((CONFIG.treeHeight/2 - h) / CONFIG.treeHeight) * CONFIG.treeRadius + 4;
-                
-                const treePos = new THREE.Vector3(Math.cos(angle)*r, h, Math.sin(angle)*r);
-                const scatterPos = new THREE.Vector3((Math.random()-0.5)*150, (Math.random()-0.5)*150, (Math.random()-0.5)*100);
-
-                mesh.position.copy(treePos);
-                mesh.lookAt(0, h, 0);
-
-                mainGroup.add(mesh);
-                particles.push({
-                    mesh: mesh,
-                    treePos: treePos,
-                    scatterPos: scatterPos,
-                    baseScale: 1,
-                    isPhoto: true,
-                    targetLookAt: new THREE.Vector3(0, h, 0)
-                });
-            }
-        }
-
-        // --- Logic Updates ---
-
-        function updateParticles(dt, time) {
-            const lerpSpeed = 2.5 * dt;
-
-            // 1. GREETING Logic
-            if (currentState === STATE.GREETING) {
-                greetingSprite.material.opacity = THREE.MathUtils.lerp(greetingSprite.material.opacity, 1, dt * 2);
-                const s = greetingSprite.scale.x;
-                const targetS = 65; 
-                const newS = THREE.MathUtils.lerp(s, targetS, dt * 2);
-                greetingSprite.scale.set(newS, newS * 0.25, 1);
-                
-                greetingSprite.position.y = Math.sin(time) * 2;
-                mainGroup.rotation.y += 0.05 * dt;
-            } else {
-                greetingSprite.material.opacity = THREE.MathUtils.lerp(greetingSprite.material.opacity, 0, dt * 5);
-                const s = greetingSprite.scale.x;
-                const newS = THREE.MathUtils.lerp(s, 30, dt * 5);
-                greetingSprite.scale.set(newS, newS * 0.25, 1);
-                
-                mainGroup.rotation.y += 0.2 * dt;
-                mainGroup.rotation.x += (0 - mainGroup.rotation.x) * dt;
-            }
-
-            // 2. Particle Logic
-            particles.forEach(p => {
-                let target;
-                if (currentState === STATE.ASSEMBLED) {
-                    target = p.treePos;
-                } else {
-                    target = p.scatterPos;
-                }
-
-                if (currentState === STATE.FOCUSED && p === focusedObject) {
-                    const dir = camera.getWorldDirection(new THREE.Vector3());
-                    const focusPos = camera.position.clone().add(dir.multiplyScalar(20)); // 稍微拉近一点
-                    p.mesh.position.lerp(focusPos, lerpSpeed);
-                    p.mesh.lookAt(camera.position);
-                    p.mesh.scale.lerp(new THREE.Vector3(2.5, 2.5, 2.5), lerpSpeed);
-                } else {
-                    p.mesh.position.lerp(target, lerpSpeed);
-                    
-                    if (!p.isPhoto) {
-                        const twinkle = Math.sin(time * 2 + p.phase) * 0.3 + 1; 
-                        const s = p.baseScale * twinkle;
-                        p.mesh.scale.set(s,s,s);
-                    } else {
-                        // 爱心缩放跳动效果
-                        const heartbeat = 1 + Math.sin(time * 3 + p.phase) * 0.1;
-                        p.mesh.scale.lerp(new THREE.Vector3(heartbeat, heartbeat, heartbeat), lerpSpeed);
-                        
-                        if (currentState === STATE.ASSEMBLED) {
-                            p.mesh.lookAt(0, p.treePos.y, 0);
-                        } else {
-                            p.mesh.lookAt(camera.position);
-                        }
-                    }
-                }
-            });
-        }
-
-        async function setupMediaPipe() {
-            await loadScript("https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js");
-            await loadScript("https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js");
-            await loadScript("https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/hands.js");
-
-            const video = document.getElementById('input-video');
-            const canvas = document.getElementById('hand-preview');
-            const ctx = canvas.getContext('2d');
-            
-            const hands = new window.Hands({locateFile: (f) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/${f}`});
-            hands.setOptions({maxNumHands: 1, modelComplexity: 1, minDetectionConfidence: 0.6, minTrackingConfidence: 0.6});
-
-            hands.onResults(results => {
-                ctx.clearRect(0, 0, canvas.width, canvas.height);
-                if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
-                    const lm = results.multiHandLandmarks[0];
-                    window.drawConnectors(ctx, lm, window.HAND_CONNECTIONS, {color: '#00FFFF', lineWidth: 2});
-                    window.drawLandmarks(ctx, lm, {color: '#FF00FF', lineWidth: 1, radius: 2});
-                    handleGesture(lm);
-                } else {
-                    document.getElementById('cursor').style.display = 'none';
-                }
-            });
-
-            const cam = new window.Camera(video, { onFrame: async () => await hands.send({image: video}), width: 320, height: 240 });
-            cam.start();
-        }
-
-        function handleGesture(lm) {
-            const wrist = lm[0];
-            const tips = [8,12,16,20];
-            let extended = 0;
-            const size = Math.hypot(lm[9].x - wrist.x, lm[9].y - wrist.y); 
-            tips.forEach(t => { if (Math.hypot(lm[t].x - wrist.x, lm[t].y - wrist.y) > size * 1.3) extended++; });
-
-            const pinchDist = Math.hypot(lm[4].x - lm[8].x, lm[4].y - lm[8].y);
-            const isPinching = pinchDist < 0.04;
-
-            const cx = (1 - lm[8].x) * window.innerWidth;
-            const cy = lm[8].y * window.innerHeight;
-            const cursor = document.getElementById('cursor');
-            cursor.style.display = 'block';
-            cursor.style.left = cx + 'px'; cursor.style.top = cy + 'px';
-            
-            if (isPinching) cursor.classList.add('pinching');
-            else cursor.classList.remove('pinching');
-
-            const status = document.getElementById('status-text');
-
-            if (isPinching) {
-                if (currentState !== STATE.ASSEMBLED) checkInteract(cx, cy);
-            } else {
-                if (currentState === STATE.FOCUSED) {
-                    targetState = STATE.GREETING; 
-                    focusedObject = null;
-                }
-                
-                if (extended <= 1) {
-                    targetState = STATE.ASSEMBLED;
-                    status.innerText = "STATUS: TREE MODE";
-                } else if (extended >= 4) {
-                    targetState = STATE.GREETING;
-                    status.innerText = "STATUS: MERRY CHRISTMAS";
-                }
-            }
-            currentState = targetState;
-        }
-
-        function checkInteract(x, y) {
-            mouse.x = (x / window.innerWidth) * 2 - 1;
-            mouse.y = -(y / window.innerHeight) * 2 + 1;
-            raycaster.setFromCamera(mouse, camera);
-            
-            const targets = particles.filter(p => p.isPhoto).map(p => p.mesh);
-            const hits = raycaster.intersectObjects(targets);
-            
-            if (hits.length > 0) {
-                const hit = particles.find(p => p.mesh === hits[0].object || p.mesh === hits[0].object.parent);
-                if (hit) {
-                    focusedObject = hit;
-                    currentState = STATE.FOCUSED;
-                    document.getElementById('status-text').innerText = "STATUS: VIEWING LOVE";
-                }
-            }
-        }
-
-        function onWindowResize() {
-            camera.aspect = window.innerWidth / window.innerHeight;
-            camera.updateProjectionMatrix();
-            renderer.setSize(window.innerWidth, window.innerHeight);
-            composer.setSize(window.innerWidth, window.innerHeight);
-        }
-
-        function animate() {
-            requestAnimationFrame(animate);
-            const dt = clock.getDelta();
-            const time = clock.getElapsedTime();
-            updateParticles(dt, time);
-            composer.render();
-        }
-
-        init();
+        const root = createRoot(document.getElementById('root'));
+        root.render(<App />);
     </script>
 </body>
 </html>
