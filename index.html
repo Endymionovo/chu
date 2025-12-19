@@ -2,62 +2,79 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Magical Christmas 3D</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Christmas Magic | 3D Hand Control</title>
     
+    <!-- 1. 引入 Babel 用于编译 JSX -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
     <style>
-        body, html { margin: 0; padding: 0; background-color: #000; overflow: hidden; font-family: sans-serif; }
+        body, html { margin: 0; padding: 0; background-color: #000; overflow: hidden; font-family: 'Helvetica Neue', sans-serif; touch-action: none; }
         #root { width: 100vw; height: 100vh; }
         
-        /* 初始加载文字 */
-        #static-loading {
-            position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
-            color: #d4af37; font-size: 20px; text-align: center;
-            z-index: 9999;
+        /* Loading Overlay */
+        #loading-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: #000; z-index: 9999; display: flex; flex-direction: column;
+            align-items: center; justify-content: center; transition: opacity 0.5s;
         }
-
-        /* 错误提示框 */
-        #error-log {
-            position: fixed; bottom: 0; left: 0; width: 100%; background: rgba(50, 0, 0, 0.9);
-            color: #ffcccc; padding: 10px; font-family: monospace; font-size: 12px;
-            display: none; z-index: 10000; max-height: 200px; overflow: auto; border-top: 2px solid red;
-        }
-
-        /* UI Styles */
-        .ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; display: flex; flex-direction: column; justify-content: space-between; z-index: 10; }
-        .header { text-align: center; padding-top: 40px; pointer-events: auto; }
+        .loader-text { color: #d4af37; font-size: 1.2rem; margin-top: 20px; letter-spacing: 2px; }
+        
+        /* UI Layer */
+        .ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 10; display: flex; flex-direction: column; justify-content: space-between; }
+        
+        .header { text-align: center; padding-top: 4vh; pointer-events: auto; }
         .title {
-            font-family: 'Times New Roman', serif; font-size: 3rem; margin: 0;
+            font-size: clamp(2rem, 5vw, 4rem); margin: 0; font-weight: 300;
             background: linear-gradient(180deg, #fff, #FFD700); -webkit-background-clip: text; color: transparent;
-            text-shadow: 0 0 20px rgba(255, 215, 0, 0.4);
+            text-shadow: 0 0 20px rgba(255, 215, 0, 0.4); letter-spacing: 0.1em;
         }
-        .controls { padding: 30px; display: flex; align-items: flex-end; gap: 20px; pointer-events: auto; }
-        .cam-box { width: 200px; height: 150px; background: #111; border: 1px solid #333; position: relative; border-radius: 8px; overflow: hidden; transform: scaleX(-1); }
-        .cam-video { width: 100%; height: 100%; object-fit: cover; opacity: 0.5; }
+
+        /* Controls Bottom */
+        .controls { padding: 20px; display: flex; flex-direction: row; align-items: flex-end; gap: 20px; pointer-events: auto; }
+        
+        .cam-box { 
+            width: 120px; height: 90px; background: #111; 
+            border: 1px solid #333; position: relative; border-radius: 8px; overflow: hidden; 
+            transform: scaleX(-1); /* Mirror */
+        }
+        /* 手机端适配：摄像头稍微大一点 */
+        @media (max-width: 600px) {
+            .controls { flex-direction: column-reverse; align-items: center; padding-bottom: 40px; }
+            .cam-box { width: 100px; height: 75px; border: 1px solid #FFD700; }
+        }
+
+        .cam-video { width: 100%; height: 100%; object-fit: cover; opacity: 0.6; }
         .cam-canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
         
-        /* Start Screen */
-        .start-screen {
-            position: fixed; inset: 0; background: #000; z-index: 100; display: flex; flex-direction: column;
-            align-items: center; justify-content: center; transition: opacity 0.8s;
+        /* Status Badges */
+        .status-panel { display: flex; flex-direction: column; gap: 8px; padding-bottom: 5px; }
+        .status-badge {
+            color: #444; font-size: 0.9rem; font-weight: bold; display: flex; align-items: center; gap: 10px;
+            transition: all 0.3s; padding: 5px 10px; border-radius: 20px; background: rgba(0,0,0,0.5);
         }
+        .status-badge.active { color: #fff; background: rgba(255,255,255,0.1); box-shadow: 0 0 15px rgba(255,255,255,0.1); }
+        .dot { width: 8px; height: 8px; background: currentColor; border-radius: 50%; }
+        .active .dot { box-shadow: 0 0 10px currentColor; }
+
+        /* Start Button */
         .btn-start {
             margin-top: 30px; padding: 15px 40px; font-size: 1.2rem;
-            background: transparent; color: #FFD700; border: 2px solid #FFD700;
+            background: rgba(255, 215, 0, 0.1); color: #FFD700; border: 1px solid #FFD700;
             cursor: pointer; text-transform: uppercase; letter-spacing: 2px;
-            transition: 0.3s; box-shadow: 0 0 15px rgba(255, 215, 0, 0.2);
+            transition: 0.3s; border-radius: 4px;
         }
         .btn-start:hover { background: #FFD700; color: #000; box-shadow: 0 0 30px rgba(255, 215, 0, 0.6); }
 
-        .status-badge {
-            color: #555; font-weight: bold; margin-bottom: 5px; display: flex; align-items: center; gap: 10px;
+        /* Error Log */
+        #debug-log {
+            position: fixed; bottom: 0; left: 0; width: 100%; max-height: 100px; overflow-y: auto;
+            background: rgba(50,0,0,0.8); color: #ffaaaa; font-size: 10px; padding: 5px; 
+            z-index: 10000; display: none;
         }
-        .status-badge.active { color: #fff; text-shadow: 0 0 10px currentColor; }
-        .dot { width: 10px; height: 10px; background: currentColor; border-radius: 50%; }
-        .active .dot { box-shadow: 0 0 10px currentColor; }
     </style>
 
-    <!-- Import Map -->
+    <!-- 2. Import Map 配置 -->
     <script type="importmap">
     {
         "imports": {
@@ -73,21 +90,25 @@
     </script>
 </head>
 <body>
-    <div id="static-loading">Initialize System...<br><span style="font-size:12px; opacity:0.6">Please wait for scripts to load</span></div>
-    <div id="error-log"></div>
+    <!-- 页面结构 -->
+    <div id="loading-overlay">
+        <div class="loader-text">INITIALIZING MAGIC...</div>
+        <div style="color: #666; font-size: 0.8rem; margin-top: 10px;">Please allow camera access</div>
+    </div>
+    <div id="debug-log"></div>
     <div id="root"></div>
 
+    <!-- 错误捕获 -->
     <script>
-        // 全局错误捕获，如果黑屏会显示原因
-        window.onerror = function(msg, url, line, col, error) {
-            const div = document.getElementById('error-log');
-            div.style.display = 'block';
-            div.innerHTML += `<div>[Error] ${msg} <br> <small>${url}:${line}</small></div>`;
-            document.getElementById('static-loading').style.display = 'none';
+        window.onerror = function(msg, url, line) {
+            const el = document.getElementById('debug-log');
+            el.style.display = 'block';
+            el.innerHTML += `<div>Error: ${msg} (Line ${line})</div>`;
         };
     </script>
 
-    <script type="module">
+    <!-- 3. 主逻辑脚本：注意 type="text/babel" 和 data-type="module" -->
+    <script type="text/babel" data-type="module">
         import React, { useState, useEffect, useRef } from 'react';
         import { createRoot } from 'react-dom/client';
         import * as THREE from 'three';
@@ -98,19 +119,23 @@
         import { Camera } from '@mediapipe/camera_utils';
         import { drawConnectors, drawLandmarks } from '@mediapipe/drawing_utils';
 
-        // 移除 loading 文字
-        document.getElementById('static-loading').style.display = 'none';
+        // 隐藏加载层
+        const hideLoader = () => {
+            const loader = document.getElementById('loading-overlay');
+            if(loader) loader.style.opacity = '0';
+            setTimeout(() => { if(loader) loader.style.display = 'none'; }, 500);
+        };
 
         const App = () => {
             const [hasStarted, setHasStarted] = useState(false);
-            const [gesture, setGesture] = useState('explode'); // 'explode' | 'tree'
-            const [debugMsg, setDebugMsg] = useState('');
+            const [gesture, setGesture] = useState('explode'); 
+            const [debugText, setDebugText] = useState('');
             
             const containerRef = useRef(null);
             const videoRef = useRef(null);
             const canvasRef = useRef(null);
             
-            // Refs for Three.js animation
+            // Refs
             const sceneRef = useRef(null);
             const particlesRef = useRef(null);
             const starRef = useRef(null);
@@ -118,25 +143,26 @@
 
             useEffect(() => { gestureRef.current = gesture; }, [gesture]);
 
-            // 1. 初始化 Three.js
+            // --- Three.js 初始化 ---
             useEffect(() => {
                 if (!hasStarted || !containerRef.current) return;
 
-                // Scene
                 const scene = new THREE.Scene();
+                // 黑色背景
                 scene.fog = new THREE.FogExp2(0x000000, 0.02);
+                
                 const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 100);
                 camera.position.z = 12;
 
-                const renderer = new THREE.WebGLRenderer({ antialias: true });
+                const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
                 renderer.setSize(window.innerWidth, window.innerHeight);
                 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
                 containerRef.current.appendChild(renderer.domElement);
 
-                // Post Processing
+                // Bloom Effect
                 const renderScene = new RenderPass(scene, camera);
                 const bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 1.5, 0.4, 0.85);
-                bloomPass.strength = 2.0;
+                bloomPass.strength = 1.8;
                 bloomPass.radius = 0.5;
                 bloomPass.threshold = 0;
 
@@ -144,42 +170,42 @@
                 composer.addPass(renderScene);
                 composer.addPass(bloomPass);
 
-                // Particles
-                const particleCount = 3000;
-                const geometry = new THREE.BoxGeometry(0.15, 0.15, 0.15);
+                // Particles (InstancedMesh)
+                const particleCount = 2500; // 稍微减少数量以优化手机性能
+                const geometry = new THREE.BoxGeometry(0.12, 0.12, 0.12);
                 const material = new THREE.MeshBasicMaterial({ color: 0xffffff });
                 const mesh = new THREE.InstancedMesh(geometry, material, particleCount);
                 
                 const dummy = new THREE.Object3D();
-                const colors = [0xFFD700, 0xC41E3A, 0x00FF00, 0x00BFFF];
+                const colors = [0xFFD700, 0xC41E3A, 0x00FF7F, 0x1E90FF, 0xFFFFFF];
                 const particleData = [];
 
                 for(let i=0; i<particleCount; i++){
-                    dummy.position.random().subScalar(0.5).multiplyScalar(20);
+                    dummy.position.random().subScalar(0.5).multiplyScalar(15);
                     dummy.updateMatrix();
                     mesh.setMatrixAt(i, dummy.matrix);
                     mesh.setColorAt(i, new THREE.Color(colors[Math.floor(Math.random()*colors.length)]));
                     
                     particleData.push({
-                        x: dummy.position.x, y: dummy.position.y, z: dummy.position.z,
-                        speed: 0.01 + Math.random() * 0.05,
                         angle: Math.random() * Math.PI * 2,
-                        radius: 5 + Math.random() * 5
+                        radius: 3 + Math.random() * 6,
+                        speed: 0.2 + Math.random() * 0.5,
+                        yOffset: (Math.random() - 0.5) * 10
                     });
                 }
                 scene.add(mesh);
                 particlesRef.current = mesh;
 
-                // Star
-                const starGeo = new THREE.OctahedronGeometry(1, 0);
+                // Golden Star
+                const starGeo = new THREE.OctahedronGeometry(1.2, 0);
                 const starMat = new THREE.MeshBasicMaterial({ color: 0xFFD700 });
                 const star = new THREE.Mesh(starGeo, starMat);
-                star.position.set(0, 5, 0);
+                star.position.set(0, 6, 0);
                 star.visible = false;
                 scene.add(star);
                 starRef.current = star;
 
-                // Resize
+                // Resize Logic
                 const handleResize = () => {
                     camera.aspect = window.innerWidth / window.innerHeight;
                     camera.updateProjectionMatrix();
@@ -188,59 +214,58 @@
                 };
                 window.addEventListener('resize', handleResize);
 
-                // Loop
+                // Animation Loop
                 const clock = new THREE.Clock();
                 const animate = () => {
                     requestAnimationFrame(animate);
                     const time = clock.getElapsedTime();
                     const mode = gestureRef.current;
 
-                    // Update Star
+                    // Star Animation
                     if(mode === 'tree') {
-                        star.visible = true;
-                        star.rotation.y += 0.02;
-                        star.scale.lerp(new THREE.Vector3(1.5,1.5,1.5), 0.1);
+                        if(!star.visible) star.visible = true;
+                        star.rotation.y += 0.03;
+                        star.scale.lerp(new THREE.Vector3(1,1,1), 0.1);
                     } else {
                         star.scale.lerp(new THREE.Vector3(0,0,0), 0.1);
                         if(star.scale.x < 0.01) star.visible = false;
                     }
 
-                    // Update Particles
+                    // Particles Animation
                     for(let i=0; i<particleCount; i++){
                         const data = particleData[i];
                         
                         if (mode === 'tree') {
-                            // Tree Logic (Cone Spiral)
-                            const h = 10;
-                            const ratio = i / particleCount;
-                            const targetY = (ratio * h) - (h/2);
-                            const r = (1 - ratio) * 4; // Cone radius
-                            const angle = i * 0.5 + time;
+                            // Tree: Cone Spiral
+                            const height = 12;
+                            const progress = (i / particleCount); 
+                            const targetY = -4 + (progress * height); // Bottom to top
+                            const coneRadius = (1 - progress) * 5; 
                             
-                            const tx = Math.cos(angle) * r;
-                            const tz = Math.sin(angle) * r;
-                            
+                            const spiralAngle = i * 0.5 + time * 1.5;
+                            const tx = Math.cos(spiralAngle) * coneRadius;
+                            const tz = Math.sin(spiralAngle) * coneRadius;
+
                             dummy.position.x += (tx - dummy.position.x) * 0.05;
                             dummy.position.y += (targetY - dummy.position.y) * 0.05;
                             dummy.position.z += (tz - dummy.position.z) * 0.05;
                         } else {
-                            // Explode Logic (Nebula)
-                            const tx = Math.sin(time * 0.5 + data.angle) * data.radius * 1.5;
-                            const ty = Math.cos(time * 0.3 + data.angle) * data.radius;
-                            const tz = Math.sin(time * 0.2 + i) * data.radius;
+                            // Explode: Orbiting Cloud
+                            const tx = Math.sin(time * 0.2 + data.angle) * data.radius * 2;
+                            const ty = Math.cos(time * 0.3 + data.angle) * data.radius + Math.sin(time)*0.5;
+                            const tz = Math.cos(time * 0.1 + i) * data.radius;
 
-                            dummy.position.x += (tx - dummy.position.x) * 0.02;
-                            dummy.position.y += (ty - dummy.position.y) * 0.02;
-                            dummy.position.z += (tz - dummy.position.z) * 0.02;
+                            dummy.position.x += (tx - dummy.position.x) * 0.03;
+                            dummy.position.y += (ty - dummy.position.y) * 0.03;
+                            dummy.position.z += (tz - dummy.position.z) * 0.03;
                         }
                         
-                        dummy.rotation.x += 0.01;
-                        dummy.rotation.y += 0.01;
+                        dummy.rotation.x = time + i;
+                        dummy.rotation.y = time + i;
                         dummy.updateMatrix();
                         mesh.setMatrixAt(i, dummy.matrix);
                     }
                     mesh.instanceMatrix.needsUpdate = true;
-
                     composer.render();
                 };
                 animate();
@@ -248,14 +273,26 @@
                 return () => {
                     window.removeEventListener('resize', handleResize);
                     containerRef.current.innerHTML = '';
-                }
+                    renderer.dispose();
+                };
             }, [hasStarted]);
 
-            // 2. 初始化 MediaPipe
+            // --- MediaPipe 初始化 ---
             useEffect(() => {
                 if(!hasStarted) return;
 
-                const onResults = (results) => {
+                const hands = new Hands({locateFile: (file) => {
+                    return `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`;
+                }});
+
+                hands.setOptions({
+                    maxNumHands: 1,
+                    modelComplexity: 0, // 手机端使用轻量模型以防卡顿
+                    minDetectionConfidence: 0.5,
+                    minTrackingConfidence: 0.5
+                });
+
+                hands.onResults((results) => {
                     const ctx = canvasRef.current.getContext('2d');
                     ctx.save();
                     ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
@@ -265,92 +302,82 @@
                         drawConnectors(ctx, landmarks, Hands.HAND_CONNECTIONS, {color: '#00FF00', lineWidth: 2});
                         drawLandmarks(ctx, landmarks, {color: '#FF0000', lineWidth: 1});
 
-                        // 简单的手势判断：指尖到手腕距离
+                        // 简单的手势检测算法
                         const wrist = landmarks[0];
-                        const tips = [8, 12, 16, 20]; // 食指、中指、无名指、小指
-                        let openFingers = 0;
-                        tips.forEach(tipIdx => {
-                            const tip = landmarks[tipIdx];
-                            const pip = landmarks[tipIdx - 2]; 
-                            // 简单判定：指尖离手腕比指关节远
-                            const dTip = Math.hypot(tip.x - wrist.x, tip.y - wrist.y);
-                            const dPip = Math.hypot(pip.x - wrist.x, pip.y - wrist.y);
-                            if (dTip > dPip) openFingers++;
+                        const tips = [8, 12, 16, 20];
+                        let extendedCount = 0;
+                        tips.forEach(t => {
+                            if (Math.hypot(landmarks[t].x - wrist.x, landmarks[t].y - wrist.y) > 0.25) {
+                                extendedCount++;
+                            }
                         });
 
-                        if (openFingers <= 1) setGesture('tree');
-                        else if (openFingers >= 3) setGesture('explode');
+                        // 状态防抖
+                        if (extendedCount <= 1) setGesture('tree');
+                        else if (extendedCount >= 3) setGesture('explode');
                     }
                     ctx.restore();
-                };
-
-                const hands = new Hands({locateFile: (file) => {
-                    return `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`;
-                }});
-
-                hands.setOptions({
-                    maxNumHands: 1,
-                    modelComplexity: 1,
-                    minDetectionConfidence: 0.5,
-                    minTrackingConfidence: 0.5
                 });
-                hands.onResults(onResults);
 
-                const camera = new Camera(videoRef.current, {
-                    onFrame: async () => {
-                        await hands.send({image: videoRef.current});
-                    },
-                    width: 320,
-                    height: 240
-                });
-                
-                camera.start().catch(err => {
-                    setDebugMsg("Camera failed: " + err.message);
-                });
-                
-                return () => { camera.stop(); }
+                // 初始化摄像头
+                if (typeof window.Camera === 'undefined' && Camera) {
+                    const camera = new Camera(videoRef.current, {
+                        onFrame: async () => {
+                            await hands.send({image: videoRef.current});
+                        },
+                        width: 320,
+                        height: 240
+                    });
+                    
+                    camera.start()
+                        .then(() => setDebugText(''))
+                        .catch(err => setDebugText('Camera Err: ' + err.message));
+                }
+
+                hideLoader();
 
             }, [hasStarted]);
 
             return (
-                <>
-                    {!hasStarted && (
-                        <div className="start-screen">
+                <React.Fragment>
+                    {!hasStarted ? (
+                        <div id="welcome-screen" style={{position:'absolute', zIndex:100, width:'100%', height:'100%', display:'flex', alignItems:'center', justifyContent:'center', flexDirection:'column'}}>
                             <h1 className="title">MERRY CHRISTMAS</h1>
-                            <button className="btn-start" onClick={() => setHasStarted(true)}>
-                                Enter Magic World
+                            <button className="btn-start" onClick={() => {
+                                setHasStarted(true);
+                                const loader = document.getElementById('loading-overlay');
+                                if(loader) loader.style.display = 'flex'; // Show loader while camera inits
+                            }}>
+                                Start Experience
                             </button>
-                            <p style={{color:'#666', marginTop:'20px'}}>
-                                Requires Camera Access • Best viewed on Desktop
-                            </p>
+                            <p style={{color:'#888', marginTop:'15px', fontSize:'0.8rem'}}>Ensure camera permissions are allowed</p>
                         </div>
-                    )}
-
-                    <div className="ui-layer" style={{opacity: hasStarted ? 1 : 0}}>
-                        <div className="header">
-                            <h1 className="title">MERRY CHRISTMAS</h1>
-                        </div>
-                        
-                        <div className="controls">
-                            <div className="cam-box">
-                                <video ref={videoRef} className="cam-video" playsInline></video>
-                                <canvas ref={canvasRef} className="cam-canvas" width="320" height="240"></canvas>
-                                {debugMsg && <div style={{position:'absolute',top:0,color:'red',fontSize:10}}>{debugMsg}</div>}
+                    ) : (
+                        <div className="ui-layer">
+                            <div className="header">
+                                <h1 className="title">MERRY CHRISTMAS</h1>
                             </div>
                             
-                            <div>
-                                <div className={`status-badge ${gesture === 'explode' ? 'active' : ''}`} style={{color: '#00BFFF'}}>
-                                    <div className="dot"></div> EXPLODE (OPEN HAND)
+                            <div className="controls">
+                                <div className="cam-box">
+                                    <video ref={videoRef} className="cam-video" playsInline webkit-playsinline="true" muted></video>
+                                    <canvas ref={canvasRef} className="cam-canvas" width="320" height="240"></canvas>
+                                    {debugText && <div style={{position:'absolute', top:0, color:'red', background:'rgba(0,0,0,0.8)', fontSize:'10px'}}>{debugText}</div>}
                                 </div>
-                                <div className={`status-badge ${gesture === 'tree' ? 'active' : ''}`} style={{color: '#FFD700'}}>
-                                    <div className="dot"></div> TREE (FIST)
+                                
+                                <div className="status-panel">
+                                    <div className={`status-badge ${gesture === 'explode' ? 'active' : ''}`} style={{color: '#87CEEB'}}>
+                                        <div className="dot"></div> OPEN HAND (EXPLODE)
+                                    </div>
+                                    <div className={`status-badge ${gesture === 'tree' ? 'active' : ''}`} style={{color: '#FFD700'}}>
+                                        <div className="dot"></div> FIST (TREE)
+                                    </div>
                                 </div>
                             </div>
                         </div>
-                    </div>
-
+                    )}
                     <div ref={containerRef} style={{position:'absolute', top:0, left:0, zIndex:1}}></div>
-                </>
+                </React.Fragment>
             );
         };
 
